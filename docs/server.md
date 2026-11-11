@@ -83,7 +83,7 @@ docker compose logs -f
 
 - `curl http://127.0.0.1:8765/health` отвечает `{"ok": true, "agents_online": 0}`;
 - `docker compose ps` через полминуты показывает `healthy`;
-- бот отвечает на `/start`.
+- бот отвечает на `/start` чек-листом «Проверка установки» (если Телеграм не показывает виджеты, напиши `/widgets off`).
 
 После правки `.env` перезапусти: `docker compose up -d --force-recreate`.
 

@@ -7,7 +7,7 @@ import anthropic
 from aiogram import Bot, Dispatcher
 from aiohttp import web
 
-from .bot import build_router
+from .bot import setup_bot
 from .config import Settings
 from .hub import AgentHub
 from .router import LLMRouter
@@ -48,9 +48,9 @@ async def run(settings: Settings) -> None:
 
     bot = Bot(settings.telegram_token)
     dp = Dispatcher()
-    dp.include_router(build_router(service, set(settings.users)))
+    allowed_updates = setup_bot(dp, service, set(settings.users), settings.agent_download_url)
     try:
-        await dp.start_polling(bot, handle_signals=True)
+        await dp.start_polling(bot, handle_signals=True, allowed_updates=allowed_updates)
     finally:
         await runner.cleanup()
         await bot.session.close()
