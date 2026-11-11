@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..client import ConnState, Status
+from ..client import ConnState, RecState, Recording, Status
 from ..config import AgentConfig, load_draft
 from ..controller import Controller
 from . import winapi
@@ -61,7 +61,7 @@ class App:
         self.log_path = log_path
         self.instance = instance
         self.config, self.draft, self.errors = load_draft(config_path)
-        self.controller = Controller(make_backend, self._on_event)
+        self.controller = Controller(make_backend, self._on_event, make_devices=self._make_devices)
         self.window: Any = None
         self.tray: Tray | None = None
         self.start_hidden = start_hidden and self.config is not None
@@ -71,6 +71,7 @@ class App:
         self._told_about_tray = False
         self._told_lost = False
         self._last_state = ConnState.DISCONNECTED
+        self._recording = False
 
     # ------------------------------------------------------------ start and stop
     def run(self) -> int:
@@ -119,6 +120,13 @@ class App:
             self.tray.stop()
         self.instance.release()
         log.info("agent closed")
+
+    def _make_devices(self, on_press: Any, on_pad: Any, on_level: Any) -> Any:
+        from ..devices import Devices
+
+        # SDL reads the Xbox Share button only through GameInput; turn it on only for that button.
+        share = self.config is not None and self.config.ptt_button == "misc1"
+        return Devices(on_press, on_pad, on_level, gameinput=share)
 
     # ------------------------------------------------------------ Host for the page
     def apply_config(self, config: AgentConfig) -> bool:
@@ -185,6 +193,8 @@ class App:
         self._events.put(event_json(seq, event))
         if isinstance(event, Status):
             self._on_status(event)
+        elif isinstance(event, Recording):
+            self._on_recording(event)
 
     def _push_events(self) -> None:
         while (event := self._events.get()) is not None:
@@ -197,12 +207,25 @@ class App:
     def _on_status(self, status: Status) -> None:
         state = status.state
         if self.tray is not None:
-            self.tray.set_state(TRAY_DOT[state], f"VoiceForever: {TRAY_TIP[state]}")
+            if not self._recording:
+                self.tray.set_state(TRAY_DOT[state], f"VoiceForever: {TRAY_TIP[state]}")
             if not self.visible:
                 self._notify(state, status.detail)
         if state is ConnState.CONNECTED:
             self._told_lost = False
         self._last_state = state
+
+    def _on_recording(self, recording: Recording) -> None:
+        """The tray dot is red while the microphone records, as the addon's badge is in the game."""
+        recording_now = recording.state == RecState.RECORDING
+        changed, self._recording = recording_now != self._recording, recording_now
+        if not changed or self.tray is None:
+            return
+        if recording_now:
+            self.tray.set_state("recording", "VoiceForever: идёт запись")
+        else:
+            state = self._last_state
+            self.tray.set_state(TRAY_DOT[state], f"VoiceForever: {TRAY_TIP[state]}")
 
     def _notify(self, state: ConnState, detail: str) -> None:
         assert self.tray is not None

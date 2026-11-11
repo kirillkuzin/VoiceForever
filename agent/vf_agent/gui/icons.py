@@ -1,6 +1,6 @@
 """The VoiceForever emblem (gold ring with a microphone) drawn in pure Python.
 
-The tray needs it in four colours at the system icon size, and the build needs an .ico for
+The tray needs it in five colours at the system icon size, and the build needs an .ico for
 the exe: `python -m vf_agent.gui.icons VoiceForever.ico`. No image library is involved.
 """
 
@@ -20,6 +20,7 @@ DOTS: frozendict[str, RGB] = frozendict({
     "connecting": (0xF2, 0xAD, 0x42),
     "disconnected": (0x8A, 0x81, 0x72),
     "error": (0xFF, 0x75, 0x63),
+    "recording": (0xE0, 0x33, 0x1B),
 })
 
 EXE_SIZES = (16, 24, 32, 48, 64, 128, 256)

@@ -13,7 +13,7 @@ from vf_server.chat import ChatMessage  # noqa: E402
 from vf_server.hub import AgentHub  # noqa: E402
 
 from vf_agent import controller as controller_module  # noqa: E402
-from vf_agent.client import ConnState, Delivery, Game, Status  # noqa: E402
+from vf_agent.client import ConnState, Delivery, Game, PadState, RecState, Recording, Status  # noqa: E402
 from vf_agent.config import AgentConfig, defaults  # noqa: E402
 from vf_agent.controller import Controller  # noqa: E402
 from vf_agent.gui.api import Api, event_json  # noqa: E402
@@ -166,7 +166,15 @@ class StubController:
         self.calls = []
 
     def snapshot(self):
-        return {"seq": 3, "status": Status(ConnState.DISCONNECTED), "game": GameState.CLOSED, "history": []}
+        return {
+            "seq": 3,
+            "status": Status(ConnState.DISCONNECTED),
+            "game": GameState.CLOSED,
+            "history": [],
+            "pad": PadState(False),
+            "recording": Recording(RecState.IDLE),
+            "bind_check": None,
+        }
 
     def connect(self):
         self.calls.append("connect")

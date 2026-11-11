@@ -15,6 +15,8 @@ from typing import Any, Self
 from urllib.parse import urlsplit
 
 from .plan import MODIFIERS, Mode, parse_combo
+from .ptt import BY_NAME as PAD_BUTTONS
+from .ptt import PttMode
 
 PLACEHOLDER_URL = "wss://your-domain.example/ws"
 PLACEHOLDER_TOKEN = "paste-agent-token-here"
@@ -26,9 +28,10 @@ LIMITS: frozendict[str, tuple[float, float]] = frozendict({
     "open_delay_ms": (0, 2000),
     "part_delay_ms": (0, 5000),
     "key_delay_ms": (0, 200),
+    "max_record_s": (3, 120),
 })
 INT_FIELDS = frozenset({"open_delay_ms", "part_delay_ms", "key_delay_ms"})
-BOOL_FIELDS = frozenset({"connect_on_start", "close_to_tray", "autostart"})
+BOOL_FIELDS = frozenset({"connect_on_start", "close_to_tray", "autostart", "ptt_enabled", "ptt_sounds"})
 LIST_FIELDS = frozenset({"window_titles", "process_names"})
 
 
@@ -55,6 +58,12 @@ class AgentConfig:
     connect_on_start: bool = True
     close_to_tray: bool = True
     autostart: bool = False
+    ptt_enabled: bool = True
+    ptt_button: str = "rightstick"
+    ptt_mode: PttMode = PttMode.TOGGLE
+    mic_device: str = ""  # "" = the Windows default microphone
+    max_record_s: float = 30
+    ptt_sounds: bool = True
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
@@ -124,6 +133,21 @@ class AgentConfig:
             if name in values and not isinstance(values[name], bool):
                 errors[name] = "Нужно true или false"
 
+        button = values.get("ptt_button", default["ptt_button"])
+        if not isinstance(button, str) or button.strip().lower() not in PAD_BUTTONS:
+            errors["ptt_button"] = "Кнопка геймпада: " + ", ".join(PAD_BUTTONS)
+        else:
+            values["ptt_button"] = button.strip().lower()
+        try:
+            values["ptt_mode"] = PttMode(values.get("ptt_mode", PttMode.TOGGLE))
+        except ValueError:
+            errors["ptt_mode"] = 'Режим записи: "toggle" (нажал и нажал ещё раз) или "hold" (держишь)'
+        mic = values.get("mic_device", "")
+        if not isinstance(mic, str):
+            errors["mic_device"] = "Нужно название микрофона или пустая строка"
+        else:
+            values["mic_device"] = mic.strip()
+
         if errors:
             raise ConfigError(errors)
         return cls(**values)
@@ -139,7 +163,7 @@ class AgentConfig:
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON-friendly values (lists, not tuples) for the window and for TOML."""
-        return {k: list(v) if isinstance(v, tuple) else str(v) if isinstance(v, Mode) else v
+        return {k: list(v) if isinstance(v, tuple) else str(v) if isinstance(v, (Mode, PttMode)) else v
                 for k, v in asdict(self).items()}
 
     def save(self, path: Path) -> None:
@@ -159,8 +183,15 @@ COMMENTS: frozendict[str, str] = frozendict({
     "focus_wait_s": "Wait this long for you to switch back to the game before giving up (seconds)",
     "open_delay_ms": "Pauses (milliseconds)",
     "connect_on_start": "Window and tray",
+    "ptt_enabled": (
+        "Push-to-talk: record your voice with a gamepad button and send it to the server\n"
+        'ptt_button: rightstick, leftstick, misc1 (Xbox Share), back (View), a, b, x, y, dpup, ...\n'
+        'ptt_mode: "toggle" = press to start, press again to send; "hold" = hold while talking'
+    ),
+    "mic_device": 'Microphone name as Windows shows it; "" = the default microphone',
+    "max_record_s": "A recording is sent after this many seconds even if the button is not pressed again",
 })
-BLANK_BEFORE = frozenset({"mode", "window_titles", "focus_wait_s", "connect_on_start"})
+BLANK_BEFORE = frozenset({"mode", "window_titles", "focus_wait_s", "connect_on_start", "ptt_enabled"})
 
 
 def toml_value(value: Any) -> str:

@@ -21,12 +21,13 @@
   <main class="view" id="view-wizard" hidden>
     <div class="field">
       <h1 class="title">Настройка агента</h1>
-      <p class="muted">Три шага, и голосовые из Telegram начнут появляться в чате игры.</p>
+      <p class="muted">Четыре шага, и сказанное с геймпада появится в чате игры.</p>
     </div>
     <ol class="steps" aria-label="Шаги настройки">
       <li data-step="1"><span class="sn">1</span><span class="sl">Сервер</span></li>
-      <li data-step="2"><span class="sn">2</span><span class="sl">Ввод в игру</span></li>
-      <li data-step="3"><span class="sn">3</span><span class="sl">Проверка</span></li>
+      <li data-step="2"><span class="sn">2</span><span class="sl">Ввод</span></li>
+      <li data-step="3"><span class="sn">3</span><span class="sl">Голос</span></li>
+      <li data-step="4"><span class="sn">4</span><span class="sl">Проверка</span></li>
     </ol>
 
     <section class="panel grow" data-page="1" aria-label="Сервер">
@@ -70,12 +71,53 @@
       </div>
     </section>
 
-    <section class="panel grow" data-page="3" aria-label="Проверка" hidden>
-      <h2 class="ph">Проверка</h2>
-      <p>Агент напишет «VoiceForever test» в /say. Нажми кнопку и в течение <span data-focus-wait>15</span> секунд переключись в окно WoW.</p>
-      <button class="btn" type="button" id="w-test" style="align-self: flex-start">Отправить тест</button>
-      <div class="note" id="w-test-result" hidden></div>
-      <div style="height: 1px; background: linear-gradient(90deg, transparent, var(--bronze), transparent)"></div>
+    <section class="panel grow scrollp" data-page="3" aria-label="Голос" hidden>
+      <h2 class="ph">Голос</h2>
+      <div class="field">
+        <label class="lbl" for="w-mic">Микрофон</label>
+        <div class="selwrap">
+          <select class="inp sel-inp" id="w-mic" data-mic></select>
+          <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="row">
+          <div class="lvl" data-level role="meter" aria-label="Громкость микрофона" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
+          <button class="btn ghost sm" type="button" data-mic-test style="flex: none">Проверить</button>
+        </div>
+        <span class="hint" data-mic-hint></span>
+      </div>
+      <div class="field">
+        <span class="lbl">Кнопка записи</span>
+        <div class="padcard" data-padcard>
+          <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
+          <div class="field grow" style="gap: 2px" data-pad-info></div>
+          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none">Назначить</button>
+        </div>
+        <span class="err" data-error-for="ptt_button"></span>
+      </div>
+      <div class="field">
+        <span class="lbl" id="w-pttmode-l">Как записывать</span>
+        <div class="seg" role="group" aria-labelledby="w-pttmode-l">
+          <button class="segb" type="button" data-pttmode="toggle">Нажал и нажал</button>
+          <button class="segb" type="button" data-pttmode="hold">Удерживать</button>
+        </div>
+        <span class="hint" data-pttmode-hint></span>
+      </div>
+      <div class="note warn top" data-ptt-warn hidden></div>
+    </section>
+
+    <section class="panel grow scrollp" data-page="4" aria-label="Проверка в игре" hidden>
+      <h2 class="ph">Проверка в игре</h2>
+      <p id="w-bind-intro"></p>
+      <ol class="chks" data-bind-rows aria-label="Ход проверки в игре"></ol>
+      <div class="note" data-bind-result hidden></div>
+      <div class="row" data-bind-actions></div>
+      <div class="sep"></div>
+      <div class="row" style="gap: 12px">
+        <span class="grow" id="w-voice-say"></span>
+        <span id="w-voice-rec"></span>
+      </div>
+      <div class="note" id="w-voice-result" hidden></div>
+      <div class="sep"></div>
       <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span>Подключаться сразу при запуске агента</span></label>
       <label class="sw" for="w-boot"><input id="w-boot" type="checkbox"><span class="track"></span><span>Запускать вместе с Windows</span></label>
     </section>
@@ -84,6 +126,7 @@
       <button class="btn ghost" type="button" id="w-back" hidden>Назад</button>
       <span class="grow"></span>
       <button class="btn ghost" type="button" id="w-skip" hidden>Продолжить без проверки</button>
+      <button class="link" type="button" id="w-later" hidden style="align-self: center; margin-right: 8px">Проверю потом</button>
       <button class="btn wide" type="button" id="w-next">Подключиться</button>
     </div>
   </main>
@@ -102,13 +145,27 @@
       <div class="row wrap" id="st-actions"></div>
     </section>
 
-    <section class="panel" aria-label="Игра" style="flex-direction: row; align-items: center; gap: 14px; padding: 12px 16px">
-      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" style="flex: none"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 12l5 10 5-10" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <div class="field grow" style="gap: 1px">
-        <span style="font-weight: 700">World of Warcraft</span>
-        <span class="hint" id="game-hint"></span>
+    <section class="panel" aria-label="Игра и голос" style="gap: 10px; padding: 12px 16px">
+      <div class="row" style="gap: 14px">
+        <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" style="flex: none"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 12l5 10 5-10" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div class="field grow" style="gap: 1px">
+          <span style="font-weight: 700">World of Warcraft</span>
+          <span class="hint" id="game-hint"></span>
+        </div>
+        <span class="pill" id="game-pill"></span>
       </div>
-      <span class="pill" id="game-pill"></span>
+      <div id="st-voice" hidden>
+        <div class="divider"></div>
+        <div class="row" style="gap: 12px; padding-top: 10px">
+          <svg width="34" height="25" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
+          <div class="field grow" style="gap: 1px">
+            <span style="font-weight: 700" id="st-pad-label"></span>
+            <span class="hint" id="st-pad-hint"></span>
+          </div>
+          <span id="st-rec"></span>
+        </div>
+        <div class="lvl thin" id="st-level" aria-hidden="true" hidden></div>
+      </div>
     </section>
 
     <section class="panel grow" aria-label="Последние сообщения" style="min-height: 0; gap: 8px">
@@ -164,6 +221,57 @@
         <span class="err" data-error-for="addon_hotkey"></span>
         <span class="hint" data-hotkey-hint></span>
       </div>
+    </section>
+
+    <section class="panel" aria-label="Голос">
+      <h2 class="ph">Голос</h2>
+      <label class="sw" for="s-ptt"><input id="s-ptt" data-check="ptt_enabled" type="checkbox"><span class="track"></span><span class="grow">Запись голоса кнопкой геймпада</span><code class="tk">ptt_enabled</code></label>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-mic">Микрофон</label><code class="tk">mic_device</code></div>
+        <div class="selwrap">
+          <select class="inp sel-inp" id="s-mic" data-mic></select>
+          <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div class="row">
+          <div class="lvl" data-level role="meter" aria-label="Громкость микрофона" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
+          <button class="btn ghost sm" type="button" data-mic-test style="flex: none">Проверить</button>
+        </div>
+        <span class="hint" data-mic-hint></span>
+      </div>
+      <div class="field">
+        <div class="lrow"><span class="lbl">Кнопка записи</span><code class="tk">ptt_button</code></div>
+        <div class="padcard" data-padcard>
+          <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
+          <div class="field grow" style="gap: 2px" data-pad-info></div>
+          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none">Назначить</button>
+        </div>
+        <span class="err" data-error-for="ptt_button"></span>
+        <div class="row" style="gap: 10px; align-items: baseline">
+          <span class="hint grow" id="s-bind-line"></span>
+          <button class="link" type="button" id="s-bind-open" style="flex: none">Проверить в игре</button>
+        </div>
+        <div class="field" id="s-bind-box" hidden>
+          <ol class="chks" data-bind-rows aria-label="Ход проверки в игре"></ol>
+          <div class="note" data-bind-result hidden></div>
+          <div class="row" data-bind-actions></div>
+        </div>
+      </div>
+      <div class="field">
+        <div class="lrow"><span class="lbl" id="s-pttmode-l">Как записывать</span><code class="tk">ptt_mode</code></div>
+        <div class="seg" role="group" aria-labelledby="s-pttmode-l">
+          <button class="segb" type="button" data-pttmode="toggle">Нажал и нажал</button>
+          <button class="segb" type="button" data-pttmode="hold">Удерживать</button>
+        </div>
+        <span class="hint" data-pttmode-hint></span>
+      </div>
+      <div class="note warn top" data-ptt-warn hidden></div>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-max">Самая длинная запись</label><code class="tk">max_record_s</code></div>
+        <div class="row" style="gap: 12px"><input id="s-max" data-range="max_record_s" data-unit="с" type="range" min="5" max="60" step="5"><output class="val" for="s-max"></output></div>
+        <span class="err" data-error-for="max_record_s"></span>
+        <span class="hint">Дольше этого запись остановится сама и уйдёт в чат.</span>
+      </div>
+      <label class="sw" for="s-snd"><input id="s-snd" data-check="ptt_sounds" type="checkbox"><span class="track"></span><span class="grow">Звук в начале и в конце записи</span><code class="tk">ptt_sounds</code></label>
     </section>
 
     <section class="panel" aria-label="Окно игры">

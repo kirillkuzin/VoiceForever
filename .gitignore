@@ -10,3 +10,6 @@ dist/
 config.toml
 *.db
 .pytest_cache/
+
+# SDL3 for the agent: CI downloads it, see .github/workflows/agent-exe.yml
+agent/SDL3.dll

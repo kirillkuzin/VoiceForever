@@ -1,6 +1,7 @@
 name: Agent exe
 
-# Tests the agent and builds VoiceForeverAgent.exe on Windows.
+# Tests the agent and the addon, and builds VoiceForeverAgent.exe on Windows with SDL3.dll
+# (gamepad and microphone for push-to-talk) inside.
 # Pull requests and master: the exe is an artifact of the run (for testing).
 # Tags v* (pushed, or created by publishing a release on GitHub): the release gets
 # the exe, the addon zip and SHA256 checksums.
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - "agent/**"
+      - "addon/**"
       - "server/vf_server/hub.py"
       - "server/vf_server/chat.py"
       - ".github/workflows/agent-exe.yml"
@@ -24,6 +26,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # SDL3 from libsdl-org/SDL releases. A new version needs a new hash: the step prints it.
+  SDL_VERSION: "3.4.8"
+  SDL_SHA256: "bba56c4fd0b2582928605614c620d217a2f1f98eb118df8b1c768af4b7159572"
 
 concurrency:
   group: agent-exe-${{ github.ref }}
@@ -39,13 +46,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+      - name: Get SDL3.dll
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "SDL3.zip"
+          $url = "https://github.com/libsdl-org/SDL/releases/download/release-$env:SDL_VERSION/SDL3-$env:SDL_VERSION-win32-x64.zip"
+          Invoke-WebRequest $url -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          Write-Output "SDL3-$env:SDL_VERSION-win32-x64.zip sha256 $hash"
+          if ($hash -ne $env:SDL_SHA256) { throw "SDL3 zip hash mismatch" }
+          $dir = Join-Path $env:RUNNER_TEMP "sdl"
+          Expand-Archive $zip -DestinationPath $dir -Force
+          Copy-Item (Join-Path $dir "SDL3.dll") SDL3.dll
       - name: Run tests
+        # test_devices.py drives the real SDL3.dll: a virtual gamepad and the dummy microphone.
         run: uv run --locked pytest -q
       - name: Build exe
         run: |
           uv run --locked python -m vf_agent.gui.icons build\VoiceForever.ico
           uv run --locked pyinstaller --noconfirm --onefile --windowed --name VoiceForeverAgent `
-            --icon build\VoiceForever.ico --add-data "vf_agent\ui;vf_agent\ui" run_agent.py
+            --icon build\VoiceForever.ico --add-data "vf_agent\ui;vf_agent\ui" --add-binary "SDL3.dll;." run_agent.py
       - name: Smoke test the exe
         run: |
           # The exe is a window app: Start-Process waits for it, and the checks read agent.log,
@@ -85,15 +104,28 @@ jobs:
           taskkill /PID $p.Id /T /F | Out-Null
           Get-Content $log -Tail 30
           if (-not $ready) { throw "the agent window did not load" }
+          # 4. SDL3.dll is inside the exe. A runner may have no sound card, so only a missing
+          #    library fails the build.
+          if (Select-String -Path $log -Pattern "SDL3 не найден" -Quiet) { throw "SDL3.dll is not in the exe" }
+          if (-not (Select-String -Path $log -Pattern "SDL 3\." -Quiet)) { Write-Warning "SDL3 did not start on the runner" }
       - uses: actions/upload-artifact@v7
         with:
           name: VoiceForeverAgent
           path: agent/dist/VoiceForeverAgent.exe
           if-no-files-found: error
 
+  addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - name: Run the addon in Lua 5.1 (lupa) against stubs of the game API
+        working-directory: addon
+        run: uv run --no-project --python 3.13 --with pytest --with lupa pytest -q tests
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, addon]
     runs-on: ubuntu-latest
     permissions:
       contents: write
