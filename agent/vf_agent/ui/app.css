@@ -384,10 +384,10 @@ input[type=range] { width: 100%; margin: 0; accent-color: var(--gold); }
 .msgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
 .msgs::-webkit-scrollbar { width: 8px; }
 .msgs::-webkit-scrollbar-thumb { background: #4a3a20; border-radius: 4px; }
-.msg { display: grid; grid-template-columns: 42px 16px minmax(0, 1fr) 18px; gap: 10px; align-items: start; padding: 8px 2px; border-bottom: 1px solid rgba(125, 97, 48, .35); }
+.msg { display: grid; grid-template-columns: minmax(42px, max-content) 16px minmax(0, 1fr) 18px; gap: 10px; align-items: start; padding: 8px 2px; border-bottom: 1px solid rgba(125, 97, 48, .35); }
 .src { color: var(--muted); padding-top: 2px; }
 .msg:last-child { border-bottom: 0; }
-.time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.time { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; white-space: nowrap; }
 .mtext { overflow-wrap: anywhere; user-select: text; }
 .mdetail { font-size: 13.5px; line-height: 1.35; }
 .mdetail.warn { color: #f6c77a; }
