@@ -48,6 +48,8 @@ class Settings:
     allow_transform: bool = True
 
     max_message_bytes: int = 255
+    # Push-to-talk recordings from the agent longer than this are refused.
+    max_voice_s: float = 60.0
     ws_host: str = "0.0.0.0"
     ws_port: int = 8765
     ack_timeout_s: float = 30.0
@@ -75,6 +77,7 @@ class Settings:
             llm_timeout_s=float(env.get("VF_LLM_TIMEOUT_S", defaults.llm_timeout_s)),
             allow_transform=_bool(env.get("VF_ALLOW_TRANSFORM"), True),
             max_message_bytes=int(env.get("VF_MAX_MESSAGE_BYTES", defaults.max_message_bytes)),
+            max_voice_s=float(env.get("VF_MAX_VOICE_S", defaults.max_voice_s)),
             ws_host=env.get("VF_WS_HOST", defaults.ws_host),
             ws_port=int(env.get("VF_WS_PORT", defaults.ws_port)),
             ack_timeout_s=float(env.get("VF_ACK_TIMEOUT_S", defaults.ack_timeout_s)),

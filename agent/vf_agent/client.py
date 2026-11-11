@@ -10,10 +10,11 @@ import logging
 import socket
 import ssl
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import (
@@ -24,15 +25,17 @@ from websockets.exceptions import (
     WebSocketException,
 )
 
-from . import __version__
+from . import __version__, audio
 from .config import AgentConfig
-from .plan import Action, GameState, SendCommand, build_actions
+from .plan import Action, GameState, Mode, SendCommand, build_actions
 
 log = logging.getLogger("vf_agent")
 
 type Ack = dict[str, str]
 
 OPEN_TIMEOUT_S = 15
+# Upload, speech recognition, Claude and typing; the server gives typing up to 30 s itself.
+VOICE_TIMEOUT_S = 90
 MAX_RETRY_DELAY_S = 30.0
 # Close reason the server hub sends when another agent connects with the same token.
 REPLACED_REASON = "replaced by a newer connection"
@@ -71,6 +74,7 @@ class Delivery:
     status: str  # "ok" | "not_focused" | "error"
     detail: str = ""
     at: float = field(default_factory=time.time)
+    voice_id: str = ""  # the push-to-talk recording it came from, if any
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,7 +82,76 @@ class Game:
     state: GameState
 
 
-type Event = Status | Delivery | Game
+@dataclass(frozen=True, slots=True)
+class VoiceResult:
+    """What the server did with a push-to-talk recording.
+
+    status: ok | not_focused | error | timeout | offline (typing, as for a Delivery), or
+    skip (not meant for chat) | empty | stt_error | bad_audio | too_long | unsupported.
+    """
+
+    id: str
+    status: str
+    channel: str = ""
+    target: str = ""
+    label: str = ""  # channel name for people, e.g. "Гильдия" or "Шёпот: Арторн"
+    text: str = ""  # what was typed (or would have been)
+    transcript: str = ""  # what speech recognition heard
+    detail: str = ""
+    at: float = field(default_factory=time.time)
+
+    @classmethod
+    def from_json(cls, voice_id: str, data: dict[str, Any]) -> VoiceResult:
+        def text(key: str) -> str:
+            value = data.get(key, "")
+            return value if isinstance(value, str) else ""
+
+        return cls(voice_id, text("status") or "error", text("channel"), text("target"), text("label"),
+                   text("text"), text("transcript"), text("detail"))
+
+
+class RecState(StrEnum):
+    IDLE = "idle"
+    RECORDING = "recording"
+    PROCESSING = "processing"  # sent to the server, waiting for the result
+
+
+@dataclass(frozen=True, slots=True)
+class Recording:
+    state: RecState
+    started_at: float | None = None  # time.time() when recording began, for the timer
+    max_s: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class PadState:
+    connected: bool
+    name: str = ""
+    playstation: bool = False
+    error: str = ""  # why the pad and microphone cannot work at all (no SDL3)
+
+
+@dataclass(frozen=True, slots=True)
+class MicLevel:
+    level: float  # 0..1, about 20 times a second while the microphone is open
+
+
+@dataclass(frozen=True, slots=True)
+class BindCheck:
+    """A step of the in-game check of the push-to-talk button.
+
+    step: waiting_game -> waiting_focus -> sent -> reloading -> done, or error.
+    """
+
+    step: str
+    key: str = ""  # the game's name for the button the addon took, e.g. PADRSTICK
+    previous: str = ""  # what the game had on that button ("" = nothing)
+    taken: bool = False
+    error: str = ""  # addon_missing | timeout | chat_mode | not_connected | no_game_folder
+    detail: str = ""
+
+
+type Event = Status | Delivery | Game | VoiceResult | Recording | PadState | MicLevel | BindCheck
 type Listener = Callable[[Event], None]
 
 
@@ -130,6 +203,8 @@ class Agent:
         self.on_event = on_event
         self.status = Status(ConnState.DISCONNECTED)
         self._typing = asyncio.Lock()  # one message at a time, in arrival order
+        self._ws: ClientConnection | None = None
+        self._voice_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
 
     def _emit(self, event: Event) -> None:
         if isinstance(event, Status):
@@ -151,7 +226,39 @@ class Agent:
 
     async def handle(self, cmd: SendCommand) -> Ack:
         result = await self._type(cmd)
-        self._emit(Delivery(cmd.channel, cmd.target, " ".join(cmd.parts), result["status"], result["detail"]))
+        self._emit(Delivery(cmd.channel, cmd.target, " ".join(cmd.parts), result["status"],
+                            result["detail"], voice_id=cmd.voice_id))
+        return result
+
+    async def type_control(self, channel: str, target: str, text: str) -> Ack:
+        """Type a line for the addon itself (push-to-talk setup, in-game badge). Addon mode only."""
+        if self.config.mode != Mode.ADDON:
+            return {"type": "ack", "id": "", "status": "error", "detail": "нужен режим addon"}
+        cmd = SendCommand(f"{channel}-{uuid.uuid4().hex[:8]}", channel, target, (text,))
+        return await self._type(cmd)
+
+    async def send_voice(self, pcm: bytes) -> VoiceResult:
+        """Send a recording to the server and wait until its message is typed (or refused)."""
+        voice_id = uuid.uuid4().hex[:16]
+        ws = self._ws
+        if ws is None:
+            result = VoiceResult(voice_id, "offline", detail="нет связи с сервером")
+        else:
+            future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+            self._voice_waiters[voice_id] = future
+            frame = audio.voice_frame(voice_id, audio.encode_wav(pcm), audio.duration_ms(pcm))
+            try:
+                await ws.send(frame)
+                async with asyncio.timeout(VOICE_TIMEOUT_S):
+                    result = VoiceResult.from_json(voice_id, await future)
+            except ConnectionClosed:
+                result = VoiceResult(voice_id, "offline", detail="связь с сервером оборвалась")
+            except TimeoutError:
+                result = VoiceResult(voice_id, "timeout", detail="сервер не ответил вовремя")
+            finally:
+                self._voice_waiters.pop(voice_id, None)
+        log.info("voice %s: %s %s", voice_id, result.status, result.detail)
+        self._emit(result)
         return result
 
     async def _type(self, cmd: SendCommand) -> Ack:
@@ -177,18 +284,29 @@ class Agent:
 
     async def serve(self, ws: ClientConnection) -> None:
         await ws.send(json.dumps({"type": "hello", "version": __version__, "mode": self.config.mode}))
-        async with asyncio.TaskGroup() as tasks:
-            async for raw in ws:
-                try:
-                    match json.loads(raw):
-                        case {"type": "send", **data}:
-                            cmd = SendCommand.from_json(data)
-                        case _:
-                            continue
-                except ValueError as e:  # bad JSON or bad command
-                    log.warning("bad message from server: %s", e)
-                    continue
-                tasks.create_task(self._reply(ws, cmd))
+        self._ws = ws
+        try:
+            async with asyncio.TaskGroup() as tasks:
+                async for raw in ws:
+                    try:
+                        match json.loads(raw):
+                            case {"type": "send", **data}:
+                                cmd = SendCommand.from_json(data)
+                            case {"type": "voice_result", "id": str(voice_id), **data}:
+                                if (waiter := self._voice_waiters.get(voice_id)) and not waiter.done():
+                                    waiter.set_result(data)
+                                continue
+                            case _:
+                                continue
+                    except ValueError as e:  # bad JSON or bad command
+                        log.warning("bad message from server: %s", e)
+                        continue
+                    tasks.create_task(self._reply(ws, cmd))
+        finally:
+            self._ws = None
+            for waiter in self._voice_waiters.values():
+                if not waiter.done():
+                    waiter.set_exception(ConnectionClosed(None, None))
 
     async def _reply(self, ws: ClientConnection, cmd: SendCommand) -> None:
         result = await self.handle(cmd)

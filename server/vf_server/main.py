@@ -18,9 +18,18 @@ from .stt import Transcriber
 log = logging.getLogger("voiceforever")
 
 
+def voice_bytes(max_voice_s: float) -> int:
+    """Frame size limit for agent recordings: WAV, mono, 16-bit, up to 48 kHz, plus headers."""
+    return int(max_voice_s * 48_000 * 2) + 64 * 1024
+
+
 async def run(settings: Settings) -> None:
     store = Store(settings.db_path)
-    hub = AgentHub(settings.users, ack_timeout_s=settings.ack_timeout_s)
+    hub = AgentHub(
+        settings.users,
+        ack_timeout_s=settings.ack_timeout_s,
+        max_voice_bytes=voice_bytes(settings.max_voice_s),
+    )
     transcriber = Transcriber(
         base_url=settings.stt_base_url,
         api_key=settings.stt_api_key,
@@ -38,8 +47,15 @@ async def run(settings: Settings) -> None:
             allow_transform=settings.allow_transform,
         )
     service = VoiceService(
-        store, hub, transcriber, router, settings.max_message_bytes, settings.known_names
+        store,
+        hub,
+        transcriber,
+        router,
+        settings.max_message_bytes,
+        settings.known_names,
+        max_voice_s=settings.max_voice_s,
     )
+    hub.voice_handler = service.handle_agent_voice
 
     runner = web.AppRunner(hub.app())
     await runner.setup()

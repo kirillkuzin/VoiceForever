@@ -8,48 +8,92 @@ import asyncio
 import contextlib
 import itertools
 import logging
+import secrets
 import threading
+import time
 from collections import deque
 from collections.abc import Callable
 from concurrent.futures import Future
+from pathlib import Path
 from typing import Any
 
+from . import savedvars
 from .client import (
     Ack,
     Agent,
     AuthError,
+    BindCheck,
     ConnState,
     Delivery,
     Event,
     Game,
     InputBackend,
+    MicLevel,
+    PadState,
+    RecState,
+    Recording,
     ReplacedError,
     Status,
+    VoiceResult,
 )
 from .config import AgentConfig
-from .plan import GameState, SendCommand
+from .devices import Devices, Pad, Press
+from .plan import GameState, Mode, SendCommand
+from .ptt import BY_NAME, Cmd, PttMachine, button_label
 
 log = logging.getLogger("vf_agent")
 
 type BackendFactory = Callable[[AgentConfig], InputBackend]
 type SeqListener = Callable[[int, Event], None]
+type DevicesFactory = Callable[[Callable[[Press], None], Callable[[Pad | None], None], Callable[[float], None]], Devices]
 
 GAME_POLL_S = 1.0
 HISTORY = 50
+RECORD_TICK_S = 0.1
+BIND_WAIT_GAME_S = 600  # the player starts the game and logs in
+BIND_WAIT_ADDON_S = 120  # the player presses the button in the game, the UI reloads
+STATUS_TEXT: frozendict[str, str] = frozendict({
+    "skip": "Пропустил: не похоже на сообщение в чат",
+    "empty": "Не расслышал ни слова",
+    "stt_error": "Не получилось распознать речь",
+    "bad_audio": "Запись не дошла до сервера",
+    "too_long": "Запись слишком длинная",
+    "unsupported": "Сервер не принимает голос от агента",
+    "offline": "Нет связи с сервером",
+    "timeout": "Сервер не ответил вовремя",
+    "error": "Не отправлено, подробности в окне агента",
+})
 
 
 class Controller:
-    def __init__(self, make_backend: BackendFactory, on_event: SeqListener | None = None) -> None:
+    def __init__(
+        self,
+        make_backend: BackendFactory,
+        on_event: SeqListener | None = None,
+        make_devices: DevicesFactory | None = None,
+    ) -> None:
         self.make_backend = make_backend
         self.on_event = on_event
+        self.make_devices = make_devices
         self.config: AgentConfig | None = None
         self.status = Status(ConnState.DISCONNECTED)
         self.game = GameState.CLOSED
-        self.history: deque[Delivery] = deque(maxlen=HISTORY)
+        self.history: deque[Delivery | VoiceResult] = deque(maxlen=HISTORY)
         self.seq = 0
+        self.pad = PadState(False)
+        self.recording = Recording(RecState.IDLE)
+        self.bind_check: BindCheck | None = None
+        self.devices: Devices | None = None
         self._agent: Agent | None = None
         self._session: asyncio.Task[None] | None = None
         self._poller: asyncio.Task[None] | None = None
+        self._ptt = PttMachine()
+        self._ticker: asyncio.Task[None] | None = None
+        self._capture: asyncio.Future[Press] | None = None
+        self._bind_task: asyncio.Task[None] | None = None
+        self._mic_test = False
+        self._sending = 0  # recordings sent and not answered yet
+        self._addon_synced: tuple[str, float] | None = None  # (mode, max_s) the addon has
         self._test_ids = itertools.count(1)
         self._lock = threading.Lock()  # guards the snapshot fields above against the window's reads
         self._loop = asyncio.new_event_loop()
@@ -59,6 +103,8 @@ class Controller:
     def start(self) -> None:
         self._thread.start()
         self._call(self._start_poller)
+        if self.make_devices is not None:
+            self._call(self._start_devices)
 
     def configure(self, config: AgentConfig) -> bool:
         """Use new settings. Returns True when this reconnects (server, token or mode changed)."""
@@ -78,6 +124,26 @@ class Controller:
         cmd = SendCommand(f"test-{next(self._test_ids)}", "say", "", ("VoiceForever test",))
         return self._call(self._handle, cmd)
 
+    def microphones(self) -> list[str]:
+        if self.devices is None:
+            return []
+        return self.devices.microphones().result(timeout=10)
+
+    def mic_test(self, on: bool, device: str = "") -> None:
+        """Open the microphone only to show its level (the wizard and the settings)."""
+        self._call(self._set_mic_test, on, device).result(timeout=10)
+
+    def capture_button(self, timeout: float = 20.0) -> Press | None:
+        """Wait for the next press on any pad button: the window assigns the push-to-talk button."""
+        return self._call(self._capture_press, timeout).result(timeout=timeout + 5)
+
+    def check_binding(self) -> None:
+        """Start the in-game check of the push-to-talk button; steps arrive as BindCheck events."""
+        self._call(self._start_bind_check)
+
+    def cancel_binding(self) -> None:
+        self._call(self._cancel_bind_check)
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
@@ -85,6 +151,9 @@ class Controller:
                 "status": self.status,
                 "game": self.game,
                 "history": list(self.history),
+                "pad": self.pad,
+                "recording": self.recording,
+                "bind_check": self.bind_check,
             }
 
     def shutdown(self, timeout: float = 5.0) -> None:
@@ -94,6 +163,8 @@ class Controller:
             self._call(self._stop_all).result(timeout)
         self._loop.call_soon_threadsafe(self._loop.stop)
         self._thread.join(timeout)
+        if self.devices is not None:
+            self.devices.stop()
 
     # ------------------------------------------------------------ loop thread
     def _call[T](self, fn: Callable[..., Any], *args: Any) -> Future[T]:
@@ -109,10 +180,16 @@ class Controller:
             match event:
                 case Status():
                     self.status = event
-                case Delivery():
+                case Delivery() | VoiceResult():
                     self.history.appendleft(event)
                 case Game(state):
                     self.game = state
+                case PadState():
+                    self.pad = event
+                case Recording():
+                    self.recording = event
+                case BindCheck():
+                    self.bind_check = event
         if self.on_event is not None:
             try:
                 self.on_event(seq, event)
@@ -125,6 +202,9 @@ class Controller:
 
     async def _configure(self, config: AgentConfig) -> bool:
         old, self.config = self.config, config
+        if (self._ptt.mode, self._ptt.max_s) != (config.ptt_mode, config.max_record_s) or not config.ptt_enabled:
+            await self._finish(self._ptt.abort())
+        self._ptt.mode, self._ptt.max_s = config.ptt_mode, config.max_record_s
         backend = self.make_backend(config)
         if self._agent is None:
             self._agent = Agent(config, backend, self._emit)
@@ -187,11 +267,259 @@ class Controller:
                 else:
                     if state is not self.game:
                         self._emit(Game(state))
+                        if state is GameState.CLOSED:
+                            self._addon_synced = None  # a new game session reads the file again
+                    if state is GameState.ACTIVE:
+                        await self._sync_addon()
             await asyncio.sleep(GAME_POLL_S)
 
+    # ------------------------------------------------------------ push-to-talk
+    def _game_focused(self) -> bool:
+        backend = self._agent.backend if self._agent is not None else None
+        try:
+            return backend is not None and backend.is_game_focused()
+        except Exception:
+            log.exception("game window check failed")
+            return False
+
+    async def _start_devices(self) -> None:
+        loop = self._loop
+
+        def on_press(press: Press) -> None:
+            loop.call_soon_threadsafe(self._on_press, press)
+
+        def on_pad(pad: Pad | None) -> None:
+            state = PadState(True, pad.name, pad.playstation) if pad else PadState(False)
+            loop.call_soon_threadsafe(self._emit, state)
+
+        def on_level(level: float) -> None:
+            loop.call_soon_threadsafe(self._emit, MicLevel(round(level, 3)))
+
+        devices = self.make_devices(on_press, on_pad, on_level)
+        if await asyncio.to_thread(devices.start):
+            self.devices = devices
+        else:
+            self._emit(PadState(False, error=devices.error or "SDL3 не запустился"))
+
+    def _on_press(self, press: Press) -> None:
+        if self._capture is not None and press.down and not self._capture.done():
+            self._capture.set_result(press)
+            return
+        config = self.config
+        if config is None or not config.ptt_enabled or press.button != config.ptt_button:
+            return
+        now = time.monotonic()
+        cmd = self._ptt.press(now, self._game_focused()) if press.down else self._ptt.release(now)
+        if cmd is not None:
+            self._loop.create_task(self._finish(cmd))
+
+    async def _finish(self, cmd: Cmd | None) -> None:
+        """Carry out what the push-to-talk rules decided."""
+        config, devices = self.config, self.devices
+        if cmd is None or config is None or devices is None:
+            return
+        sounds = config.ptt_sounds
+        match cmd:
+            case Cmd.START:
+                self._mic_test = False
+                try:
+                    await asyncio.wrap_future(devices.start_recording(config.mic_device))
+                except Exception as e:
+                    log.error("cannot record: %s", e)
+                    self._ptt.abort()
+                    if sounds:
+                        devices.beep("error")
+                    self._emit(VoiceResult("", "error", detail=f"микрофон: {e}"))
+                    return
+                if sounds:
+                    devices.beep("start")
+                self._emit(Recording(RecState.RECORDING, time.time(), config.max_record_s))
+                if self._ticker is None or self._ticker.done():
+                    self._ticker = asyncio.create_task(self._tick())
+            case Cmd.CANCEL:
+                await asyncio.wrap_future(devices.stop_recording())
+                if sounds:
+                    devices.beep("cancel")
+                self._emit(Recording(RecState.PROCESSING if self._sending else RecState.IDLE))
+            case Cmd.SEND:
+                pcm = await asyncio.wrap_future(devices.stop_recording())
+                if sounds:
+                    devices.beep("stop")
+                asyncio.create_task(self._send_voice(pcm))
+
+    async def _tick(self) -> None:
+        while self._ptt.recording:
+            await asyncio.sleep(RECORD_TICK_S)
+            await self._finish(self._ptt.tick(time.monotonic()))
+
+    async def _send_voice(self, pcm: bytes) -> None:
+        agent = self._agent
+        self._sending += 1
+        if not self._ptt.recording:
+            self._emit(Recording(RecState.PROCESSING))
+        try:
+            if agent is None:
+                result = VoiceResult("", "offline", detail="нет связи с сервером")
+                self._emit(result)
+            else:
+                result = await agent.send_voice(pcm)
+        finally:
+            self._sending -= 1
+        if not self._ptt.recording:
+            self._emit(Recording(RecState.PROCESSING if self._sending else RecState.IDLE))
+        if result.status != "ok" and self.config is not None and self.devices is not None:
+            if self.config.ptt_sounds:
+                self.devices.beep("error")
+        # In the game the badge waits for the message; tell it when none will come.
+        if agent is not None and result.status not in ("ok", "not_focused"):
+            text = STATUS_TEXT.get(result.status, result.detail or "Не отправлено")
+            await agent.type_control("status", result.status, text)
+
+    async def _set_mic_test(self, on: bool, device: str) -> None:
+        if self.devices is None or self._ptt.recording:
+            return
+        if on:
+            await asyncio.wrap_future(self.devices.start_recording(device, keep=False))
+            self._mic_test = True
+        elif self._mic_test:
+            self._mic_test = False
+            await asyncio.wrap_future(self.devices.stop_recording())
+
+    async def _capture_press(self, timeout: float) -> Press | None:
+        self._capture = self._loop.create_future()
+        try:
+            async with asyncio.timeout(timeout):
+                return await self._capture
+        except TimeoutError:
+            return None
+        finally:
+            self._capture = None
+
+    # ------------------------------------------------------------ addon setup
+    async def _sync_addon(self) -> None:
+        """Tell the addon a changed mode or time limit, so its badge follows the same rules."""
+        config, agent, backend = self.config, self._agent, self._agent.backend if self._agent else None
+        if config is None or agent is None or config.mode != Mode.ADDON or not config.ptt_enabled:
+            return
+        if self._ptt.recording or (self._bind_task is not None and not self._bind_task.done()):
+            return
+        wanted = (str(config.ptt_mode), float(config.max_record_s))
+        if self._addon_synced == wanted:
+            return
+        if self._addon_synced is None:  # first look in this game session: what does the addon have?
+            db = await asyncio.to_thread(read_addon_db, backend)
+            ptt = db.get("ptt") if isinstance(db.get("ptt"), dict) else {}
+            if not ptt.get("key"):
+                self._addon_synced = wanted  # the button is not set up yet: the check will send it
+                return
+            self._addon_synced = (str(ptt.get("mode", "")), float(ptt.get("max", 0) or 0))
+            if self._addon_synced == wanted:
+                return
+        ack = await agent.type_control("ptt", "config", f"{wanted[0]} {wanted[1]:g}")
+        if ack["status"] == "ok":
+            self._addon_synced = wanted
+
+    async def _start_bind_check(self) -> None:
+        await self._cancel_bind_check()
+        self._bind_task = asyncio.create_task(self._bind_check())
+
+    async def _cancel_bind_check(self) -> None:
+        task, self._bind_task = self._bind_task, None
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _bind_check(self) -> None:
+        config, agent = self.config, self._agent
+        if config is None or agent is None:
+            self._emit(BindCheck("error", error="not_connected", detail="сначала сохрани настройки"))
+            return
+        if config.mode != Mode.ADDON:
+            self._emit(BindCheck("error", error="chat_mode", detail="проверка работает только с аддоном"))
+            return
+        backend = agent.backend
+        try:
+            async with asyncio.timeout(BIND_WAIT_GAME_S):
+                self._emit(BindCheck("waiting_game"))
+                while self.game is GameState.CLOSED:
+                    await asyncio.sleep(0.5)
+                self._emit(BindCheck("waiting_focus"))
+                while not self._game_focused():
+                    await asyncio.sleep(0.3)
+        except TimeoutError:
+            self._emit(BindCheck("error", error="timeout", detail="игра так и не появилась"))
+            return
+
+        exe = await asyncio.to_thread(getattr(backend, "game_exe", lambda: None))
+        nonce = secrets.token_hex(4)
+        ack = await agent.type_control("ptt", "setup", f"{config.ptt_mode} {config.max_record_s:g} {nonce}")
+        if ack["status"] != "ok":
+            self._emit(BindCheck("error", error="timeout", detail="окно игры не было активным"))
+            return
+        self._emit(BindCheck("sent"))
+
+        pressed = False
+        try:
+            async with asyncio.timeout(BIND_WAIT_ADDON_S):
+                while True:
+                    if pressed or self.recording.state is not RecState.IDLE:
+                        await asyncio.sleep(0.5)
+                    elif await self._pressed_soon():
+                        pressed = True
+                        self._emit(BindCheck("reloading"))
+                    db = await asyncio.to_thread(read_addon_db_from, exe)
+                    ptt = db.get("ptt") if isinstance(db.get("ptt"), dict) else {}
+                    if ptt.get("nonce") == nonce:
+                        self._addon_synced = (str(config.ptt_mode), float(config.max_record_s))
+                        self._emit(BindCheck(
+                            "done",
+                            key=str(ptt.get("key", "")),
+                            previous=str(ptt.get("previous", "")),
+                            taken=bool(ptt.get("key")),
+                        ))
+                        return
+        except TimeoutError:
+            pass
+        if exe is None:
+            error, detail = "no_game_folder", "не нашёл папку игры, результат смотри в игре"
+        elif not pressed:
+            error, detail = "addon_missing", "аддон не ответил: включён ли VoiceForever в списке аддонов?"
+        else:
+            error, detail = "timeout", "аддон не сохранил результат, попробуй /reload в игре"
+        self._emit(BindCheck("error", error=error, detail=detail))
+
+    async def _pressed_soon(self) -> bool:
+        """Wait up to a second for any pad press (the player presses the button in the game)."""
+        if self.devices is None:
+            await asyncio.sleep(1)
+            return False
+        return await self._capture_press(1.0) is not None
+
     async def _stop_all(self) -> None:
+        await self._cancel_bind_check()
+        await self._finish(self._ptt.abort())
+        if self._ticker is not None:
+            self._ticker.cancel()
         await self._disconnect()
         if self._poller is not None:
             self._poller.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._poller
+
+
+def read_addon_db_from(exe: Path | None) -> dict[str, Any]:
+    """VoiceForeverDB from the newest SavedVariables file of the running game, {} if none."""
+    if exe is None:
+        return {}
+    for path in savedvars.addon_files(exe):
+        try:
+            return savedvars.read_addon_db(path)
+        except (OSError, savedvars.LuaError) as e:
+            log.warning("cannot read %s: %s", path, e)
+    return {}
+
+
+def read_addon_db(backend: InputBackend | None) -> dict[str, Any]:
+    exe = getattr(backend, "game_exe", None)
+    return read_addon_db_from(exe() if exe is not None else None)

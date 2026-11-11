@@ -65,6 +65,9 @@ SLASH: frozendict[str, str] = frozendict({
 })
 
 ADDON_PREFIX = "VF"
+# Lines for the addon itself, not chat: push-to-talk setup and the in-game status badge.
+# Only the agent writes them; the server may not.
+CONTROL_CHANNELS = frozenset({"ptt", "status"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +82,7 @@ class SendCommand:
     channel: str
     target: str
     parts: tuple[str, ...]
+    voice_id: str = ""  # set when the message comes from a push-to-talk recording
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Self:
@@ -86,12 +90,16 @@ class SendCommand:
             case {"id": str() | int() as msg_id, "parts": list(parts)} if all(
                 isinstance(p, str) for p in parts
             ):
+                channel = str(data.get("channel", "say"))
+                if channel in CONTROL_CHANNELS:
+                    raise ValueError(f"channel {channel!r} is for the agent itself")
                 cleaned = tuple(c for p in parts if (c := _clean(p)))
                 return cls(
                     id=str(msg_id),
-                    channel=str(data.get("channel", "say")),
+                    channel=channel,
                     target=str(data.get("target", "")),
                     parts=cleaned,
+                    voice_id=str(data.get("voice_id", "")),
                 )
             case _:
                 raise ValueError("expected an id and parts as a list of strings")

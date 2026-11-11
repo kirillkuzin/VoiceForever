@@ -10,6 +10,7 @@ import sys
 import time
 from collections.abc import Iterable
 from ctypes import wintypes
+from pathlib import Path
 
 from .plan import KEY_CODES, Action, GameState, Kind, parse_combo
 
@@ -176,7 +177,7 @@ def _title(hwnd: int) -> str:
     return buf.value
 
 
-def _exe_name(hwnd: int) -> str:
+def _exe_path(hwnd: int) -> str:
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
@@ -186,10 +187,14 @@ def _exe_name(hwnd: int) -> str:
         size = wintypes.DWORD(1024)
         path = ctypes.create_unicode_buffer(size.value)
         if kernel32.QueryFullProcessImageNameW(proc, 0, path, ctypes.byref(size)):
-            return os.path.basename(path.value)
+            return path.value
         return ""
     finally:
         kernel32.CloseHandle(proc)
+
+
+def _exe_name(hwnd: int) -> str:
+    return os.path.basename(_exe_path(hwnd))
 
 
 def foreground_window() -> tuple[str, str]:
@@ -238,6 +243,13 @@ class WindowsBackend:
             if hwnd != foreground and self._is_game(_title(hwnd), _exe_name(hwnd)):
                 return GameState.BACKGROUND
         return GameState.CLOSED
+
+    def game_exe(self) -> Path | None:
+        """Full path of the running game's exe: its WTF folder holds the addon's saved data."""
+        for hwnd in [user32.GetForegroundWindow(), *visible_windows()]:
+            if hwnd and self._is_game(_title(hwnd), _exe_name(hwnd)) and (path := _exe_path(hwnd)):
+                return Path(path)
+        return None
 
     def run(self, actions: list[Action]) -> None:
         saved = get_clipboard_text()

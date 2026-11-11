@@ -61,7 +61,7 @@ class App:
         self.log_path = log_path
         self.instance = instance
         self.config, self.draft, self.errors = load_draft(config_path)
-        self.controller = Controller(make_backend, self._on_event)
+        self.controller = Controller(make_backend, self._on_event, make_devices=self._make_devices)
         self.window: Any = None
         self.tray: Tray | None = None
         self.start_hidden = start_hidden and self.config is not None
@@ -119,6 +119,13 @@ class App:
             self.tray.stop()
         self.instance.release()
         log.info("agent closed")
+
+    def _make_devices(self, on_press: Any, on_pad: Any, on_level: Any) -> Any:
+        from ..devices import Devices
+
+        # SDL reads the Xbox Share button only through GameInput; turn it on only for that button.
+        share = self.config is not None and self.config.ptt_button == "misc1"
+        return Devices(on_press, on_pad, on_level, gameinput=share)
 
     # ------------------------------------------------------------ Host for the page
     def apply_config(self, config: AgentConfig) -> bool:
