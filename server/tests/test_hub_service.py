@@ -20,7 +20,7 @@ class FakeTranscriber:
         self.text = text
         self.prompts = []
 
-    async def transcribe(self, audio, filename, extra_prompt=""):
+    async def transcribe(self, audio, filename, extra_prompt="", lang="en"):
         self.prompts.append(extra_prompt)
         return self.text
 

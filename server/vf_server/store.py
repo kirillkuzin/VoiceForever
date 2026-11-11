@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 from .chat import Channel
+from .i18n import LANGUAGES, SOURCE, from_code
 from .router import SentRecord
 
 
@@ -36,8 +37,12 @@ class UiState:
     custom_style: str = ""  # last /style text, so the panel can switch back to it
     lang: str = ""  # the language picked with /language or on the panel; "" = as in Telegram
     tg_lang: str = ""  # the language of the player's Telegram app, as last seen
-    lang: str = ""  # the language picked with /language or on the panel; "" = as in Telegram
-    tg_lang: str = ""  # the language of the player's Telegram app, as last seen
+
+    def language(self) -> str:
+        """The player's language: the one they picked, else their Telegram app's, else English."""
+        if self.lang in LANGUAGES:
+            return self.lang
+        return from_code(self.tg_lang) or SOURCE
 
 
 _UI_COLUMNS = tuple(f.name for f in fields(UiState))

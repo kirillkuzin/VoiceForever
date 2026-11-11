@@ -137,5 +137,7 @@
   "setup.again": "Noch einmal",
   "setup.send_test": "Test senden",
   "setup.wait_voice": "Warte auf eine Sprachnachricht in diesem Chat…",
-  "setup.all_done": "✓ Alles funktioniert. Das Bedienfeld ist oben im Chat angeheftet."
+  "setup.all_done": "✓ Alles funktioniert. Das Bedienfeld ist oben im Chat angeheftet.",
+  "stt.prompt": "World-of-Warcraft-Chat. Gruppe, Raid, Gilde, Dungeon, Instanz, Heiler, Tank, DD, Aggro, Buff, Debuff, CD, Loot, Würfeln, Wipe, Pull, AFK, GG, Quest, Mob, Boss.",
+  "stt.names": "Namen: {names}."
 }

@@ -39,7 +39,7 @@ class FakeTranscriber:
     def __init__(self, text="", error=False):
         self.text, self.error, self.files = text, error, []
 
-    async def transcribe(self, audio, filename, extra_prompt=""):
+    async def transcribe(self, audio, filename, extra_prompt="", lang="en"):
         self.files.append((filename, len(audio)))
         if self.error:
             raise TranscriptionError("STT HTTP 500")

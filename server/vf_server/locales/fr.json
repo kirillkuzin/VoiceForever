@@ -137,5 +137,7 @@
   "setup.again": "Encore",
   "setup.send_test": "Envoyer le test",
   "setup.wait_voice": "J'attends un message vocal dans ce chat…",
-  "setup.all_done": "✓ Tout fonctionne. Le panneau est épinglé en haut du chat."
+  "setup.all_done": "✓ Tout fonctionne. Le panneau est épinglé en haut du chat.",
+  "stt.prompt": "Chat de World of Warcraft. Groupe, raid, guilde, donjon, instance, heal, tank, DPS, aggro, buff, debuff, CD, loot, roll, wipe, pull, AFK, GG, quête, mob, boss.",
+  "stt.names": "Noms : {names}."
 }

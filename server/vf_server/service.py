@@ -8,6 +8,7 @@ from typing import Any
 
 from .chat import ChatMessage, split_message, validate
 from .hub import Ack, AckStatus, AgentHub, VoiceUpload
+from .i18n import LANGUAGES, t
 from .router import Decision, LLMRouter, RouteContext, RouteResult, rule_route
 from .store import Store
 from .stt import Transcriber, TranscriptionError
@@ -52,10 +53,17 @@ class VoiceService:
             recent=self.store.recent(user_id),
         )
 
+    def speech_language(self, user_id: int) -> str:
+        """The language of the hints sent with the audio: the one speech recognition is
+        locked to if it is one of the bot's, else the player's (see Store.ui().language())."""
+        locked = getattr(self.transcriber, "language", "")
+        return locked if locked in LANGUAGES else self.store.ui(user_id).language()
+
     async def transcribe(self, user_id: int, audio: bytes, filename: str) -> str:
+        lang = self.speech_language(user_id)
         names = self.context(user_id).known_names
-        hint = f"Имена: {', '.join(names)}." if names else ""
-        return await self.transcriber.transcribe(audio, filename, extra_prompt=hint)
+        hint = t(lang, "stt.names", names=", ".join(names)) if names else ""
+        return await self.transcriber.transcribe(audio, filename, extra_prompt=hint, lang=lang)
 
     async def route(self, user_id: int, transcript: str) -> RouteResult:
         ctx = self.context(user_id)

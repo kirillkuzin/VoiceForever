@@ -137,5 +137,7 @@
   "setup.again": "Again",
   "setup.send_test": "Send test",
   "setup.wait_voice": "Waiting for a voice message in this chat…",
-  "setup.all_done": "✓ Everything works. The control panel is pinned at the top of the chat."
+  "setup.all_done": "✓ Everything works. The control panel is pinned at the top of the chat.",
+  "stt.prompt": "World of Warcraft chat. Party, raid, guild, dungeon, instance, heal, tank, DPS, aggro, buff, debuff, cooldown, loot, roll, wipe, pull, AFK, brb, GG, quest, mob, boss.",
+  "stt.names": "Names: {names}."
 }

@@ -211,9 +211,7 @@ class WidgetUI:
         ui = self.store.ui(uid)
         if telegram_code and telegram_code != ui.tg_lang:
             ui = self.store.update_ui(uid, tg_lang=telegram_code)
-        if ui.lang in LANGUAGES:
-            return ui.lang
-        return from_code(ui.tg_lang) or SOURCE
+        return ui.language()
 
     def telegram_lang(self, uid: int) -> str:
         """The language "as in Telegram" would give."""
