@@ -54,9 +54,32 @@ def test_config_load(tmp_path):
     from vf_agent.config import TEMPLATE, AgentConfig
 
     path = tmp_path / "config.toml"
-    path.write_text(TEMPLATE.replace("paste-agent-token-here", "x" * 20).replace('mode = "addon"', 'mode = "chat"'))
+    text = TEMPLATE.replace("paste-agent-token-here", "x" * 20).replace("your-domain.example", "vf.example.com")
+    path.write_text(text.replace('mode = "addon"', 'mode = "chat"'))
     cfg = AgentConfig.load(path)
     assert cfg.mode is Mode.CHAT and cfg.window_titles == ("World of Warcraft",)
     path.write_text(TEMPLATE)
     with pytest.raises(ValueError):
         AgentConfig.load(path)
+
+
+@pytest.mark.parametrize(
+    "combo, keys",
+    [
+        ("ctrl+shift+f12", ["ctrl", "shift", "f12"]),
+        ("CTRL-SHIFT-F12", ["ctrl", "shift", "f12"]),
+        (" alt + num5 ", ["alt", "num5"]),
+    ],
+)
+def test_parse_combo(combo, keys):
+    from vf_agent.plan import parse_combo
+
+    assert parse_combo(combo) == keys
+
+
+@pytest.mark.parametrize("combo", ["", "+", "ctrl+banana"])
+def test_parse_combo_rejects(combo):
+    from vf_agent.plan import parse_combo
+
+    with pytest.raises(ValueError):
+        parse_combo(combo)

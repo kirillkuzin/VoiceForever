@@ -16,6 +16,38 @@ class Kind(StrEnum):
     SLEEP = "sleep"
 
 
+class GameState(StrEnum):
+    ACTIVE = "active"  # the game window is in front
+    BACKGROUND = "background"  # the game runs, another window is in front
+    CLOSED = "closed"  # no game window found
+
+
+# Key names usable in combos like "ctrl+shift+f12", mapped to Windows virtual-key codes.
+KEY_CODES: frozendict[str, int] = frozendict({
+    "ctrl": 0x11, "control": 0x11, "shift": 0x10, "alt": 0x12,
+    "enter": 0x0D, "return": 0x0D, "escape": 0x1B, "esc": 0x1B, "tab": 0x09,
+    "space": 0x20, "backspace": 0x08,
+    "home": 0x24, "end": 0x23, "insert": 0x2D, "delete": 0x2E,
+    "pageup": 0x21, "pagedown": 0x22,
+    **{f"f{i}": 0x70 + i - 1 for i in range(1, 25)},
+    **{chr(c).lower(): c for c in range(ord("A"), ord("Z") + 1)},
+    **{str(d): 0x30 + d for d in range(10)},
+    **{f"num{d}": 0x60 + d for d in range(10)},
+})
+MODIFIERS = frozenset({"ctrl", "control", "shift", "alt"})
+
+
+def parse_combo(combo: str) -> list[str]:
+    """Split "Ctrl+Shift+F12" (or "CTRL-SHIFT-F12", as the addon writes it) into known key names."""
+    keys = [k.strip().lower() for k in combo.replace("-", "+").split("+") if k.strip()]
+    if not keys:
+        raise ValueError("empty key combination")
+    for key in keys:
+        if key not in KEY_CODES:
+            raise ValueError(f"unknown key {key!r} in {combo!r}")
+    return keys
+
+
 # Slash commands for chat mode (no addon): the agent opens the normal chat box.
 SLASH: frozendict[str, str] = frozendict({
     "say": "/s",

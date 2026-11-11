@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>VoiceForever</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="win">
+  <header class="bar pywebview-drag-region">
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14.5" fill="#120d09" stroke="#dcb563" stroke-width="1.5"/><circle cx="16" cy="16" r="11.5" fill="none" stroke="#7d6130" stroke-width="1"/><rect x="13" y="7.5" width="6" height="11" rx="3" fill="#dcb563"/><path d="M10.5 15a5.5 5.5 0 0 0 11 0" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round"/><path d="M16 20.5v3.5M12.5 24.5h7" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <span class="brand pywebview-drag-region">VoiceForever</span>
+    <span class="spacer pywebview-drag-region"></span>
+    <span class="ver pywebview-drag-region" id="version"></span>
+    <button class="wbtn" type="button" id="btn-minimize" aria-label="Свернуть"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button class="wbtn x" type="button" id="btn-close" aria-label="Закрыть"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </header>
+
+  <!-- ============================================================ first run -->
+  <main class="view" id="view-wizard" hidden>
+    <div class="field">
+      <h1 class="title">Настройка агента</h1>
+      <p class="muted">Три шага, и голосовые из Telegram начнут появляться в чате игры.</p>
+    </div>
+    <ol class="steps" aria-label="Шаги настройки">
+      <li data-step="1"><span class="sn">1</span><span class="sl">Сервер</span></li>
+      <li data-step="2"><span class="sn">2</span><span class="sl">Ввод в игру</span></li>
+      <li data-step="3"><span class="sn">3</span><span class="sl">Проверка</span></li>
+    </ol>
+
+    <section class="panel grow" data-page="1" aria-label="Сервер">
+      <h2 class="ph">Сервер</h2>
+      <div class="field">
+        <label class="lbl" for="w-url">Адрес сервера</label>
+        <input class="inp" id="w-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off" placeholder="wss://vf.example.com/ws">
+        <span class="err" data-error-for="server_url"></span>
+        <span class="hint">Начинается с wss://. Обычный ws:// подходит только для своей домашней сети.</span>
+      </div>
+      <div class="field">
+        <label class="lbl" for="w-token">Токен агента</label>
+        <div class="row">
+          <input class="inp grow" id="w-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
+          <button class="btn ghost" type="button" data-reveal="w-token" style="min-width: 108px; min-height: 42px">Показать</button>
+        </div>
+        <span class="err" data-error-for="token"></span>
+        <span class="hint">Часть после двоеточия у твоего Telegram ID в VF_USERS на сервере.</span>
+      </div>
+      <div class="err" data-error-for="file"></div>
+      <div class="note" id="w-check" hidden></div>
+    </section>
+
+    <section class="panel grow" data-page="2" aria-label="Ввод в игру" hidden>
+      <h2 class="ph">Ввод в игру</h2>
+      <div class="field" aria-label="Режим ввода">
+        <button class="choice" type="button" data-mode="addon">
+          <span class="ct"><span class="dot"></span>С аддоном VoiceForever<span class="badge">советуем</span></span>
+          <span class="hint">Окно чата не открывается. Аддон сам выбирает группу, рейд или подземелье и отвечает на последний шёпот.</span>
+        </button>
+        <button class="choice" type="button" data-mode="chat">
+          <span class="ct"><span class="dot"></span>Обычный чат</span>
+          <span class="hint">Без аддона. Агент открывает чат клавишей Enter и печатает /p, /g, /w.</span>
+        </button>
+      </div>
+      <div class="field" data-addon-only>
+        <span class="lbl">Клавиша аддона</span>
+        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture>Изменить</button></div>
+        <span class="err" data-error-for="addon_hotkey"></span>
+        <span class="hint" data-hotkey-hint></span>
+      </div>
+    </section>
+
+    <section class="panel grow" data-page="3" aria-label="Проверка" hidden>
+      <h2 class="ph">Проверка</h2>
+      <p>Агент напишет «VoiceForever test» в /say. Нажми кнопку и в течение <span data-focus-wait>15</span> секунд переключись в окно WoW.</p>
+      <button class="btn" type="button" id="w-test" style="align-self: flex-start">Отправить тест</button>
+      <div class="note" id="w-test-result" hidden></div>
+      <div style="height: 1px; background: linear-gradient(90deg, transparent, var(--bronze), transparent)"></div>
+      <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span>Подключаться сразу при запуске агента</span></label>
+      <label class="sw" for="w-boot"><input id="w-boot" type="checkbox"><span class="track"></span><span>Запускать вместе с Windows</span></label>
+    </section>
+
+    <div class="row">
+      <button class="btn ghost" type="button" id="w-back" hidden>Назад</button>
+      <span class="grow"></span>
+      <button class="btn ghost" type="button" id="w-skip" hidden>Продолжить без проверки</button>
+      <button class="btn wide" type="button" id="w-next">Подключиться</button>
+    </div>
+  </main>
+
+  <!-- ============================================================ status -->
+  <main class="view" id="view-status" hidden>
+    <section class="panel" aria-label="Соединение с сервером">
+      <div class="row" style="gap: 18px">
+        <span class="orb" id="st-orb" aria-hidden="true"></span>
+        <div class="field grow" style="gap: 2px">
+          <span class="state" id="st-title" role="status"></span>
+          <span class="url" id="st-url"></span>
+          <span class="hint nums" id="st-line"></span>
+        </div>
+      </div>
+      <div class="row wrap" id="st-actions"></div>
+    </section>
+
+    <section class="panel" aria-label="Игра" style="flex-direction: row; align-items: center; gap: 14px; padding: 12px 16px">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" style="flex: none"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 12l5 10 5-10" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="field grow" style="gap: 1px">
+        <span style="font-weight: 700">World of Warcraft</span>
+        <span class="hint" id="game-hint"></span>
+      </div>
+      <span class="pill" id="game-pill"></span>
+    </section>
+
+    <section class="panel grow" aria-label="Последние сообщения" style="min-height: 0; gap: 8px">
+      <div class="row" style="gap: 12px">
+        <h2 class="ph grow">Последние сообщения</h2>
+        <button class="link" type="button" id="btn-log">Открыть журнал</button>
+      </div>
+      <ul class="msgs" id="msgs"></ul>
+      <div class="row" style="gap: 12px; padding-top: 4px">
+        <button class="btn ghost" type="button" id="st-test" style="flex: none">Тест в /say</button>
+        <span class="hint" id="st-test-hint"></span>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================ settings -->
+  <main class="view scroll" id="view-settings" hidden>
+    <div class="note bad" id="s-file-error" hidden></div>
+
+    <section class="panel" aria-label="Сервер">
+      <h2 class="ph">Сервер</h2>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-url">Адрес сервера</label><code class="tk">server_url</code></div>
+        <input class="inp" id="s-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off">
+        <span class="err" data-error-for="server_url"></span>
+        <span class="hint">wss:// через TLS. ws:// только в своей сети.</span>
+      </div>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-token">Токен агента</label><code class="tk">token</code></div>
+        <div class="row">
+          <input class="inp grow" id="s-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
+          <button class="btn ghost" type="button" data-reveal="s-token" style="min-width: 108px; min-height: 42px">Показать</button>
+        </div>
+        <span class="err" data-error-for="token"></span>
+        <span class="hint">Часть после двоеточия у твоего Telegram ID в VF_USERS на сервере.</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Ввод в игру">
+      <h2 class="ph">Ввод в игру</h2>
+      <div class="field">
+        <div class="lrow"><span class="lbl" id="s-mode-l">Режим</span><code class="tk">mode</code></div>
+        <div class="seg" role="group" aria-labelledby="s-mode-l">
+          <button class="segb" type="button" data-mode="addon">Аддон</button>
+          <button class="segb" type="button" data-mode="chat">Обычный чат</button>
+        </div>
+        <span class="err" data-error-for="mode"></span>
+        <span class="hint" id="s-mode-hint"></span>
+      </div>
+      <div class="field" data-addon-only>
+        <div class="lrow"><span class="lbl">Клавиша аддона</span><code class="tk">addon_hotkey</code></div>
+        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture>Изменить</button></div>
+        <span class="err" data-error-for="addon_hotkey"></span>
+        <span class="hint" data-hotkey-hint></span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Окно игры">
+      <h2 class="ph">Окно игры</h2>
+      <p class="hint">Агент печатает только в активное окно игры. Достаточно совпадения по названию окна или по имени процесса.</p>
+      <div class="field">
+        <div class="lrow"><span class="lbl">Названия окна</span><code class="tk">window_titles</code></div>
+        <div class="chips" data-chips="window_titles"></div>
+        <span class="err" data-error-for="window_titles"></span>
+      </div>
+      <div class="field">
+        <div class="lrow"><span class="lbl">Процессы игры</span><code class="tk">process_names</code></div>
+        <div class="chips" data-chips="process_names"></div>
+        <span class="err" data-error-for="process_names"></span>
+      </div>
+      <div class="field" style="gap: 8px">
+        <button class="btn ghost" type="button" id="s-detect" style="align-self: flex-start">Определить по окну игры</button>
+        <div class="note" id="s-detect-note" hidden></div>
+        <span class="hint" id="s-detect-hint">Нажми, затем за 5 секунд переключись в игру: агент сам добавит её окно и процесс.</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="Тайминги ввода">
+      <h2 class="ph">Тайминги ввода</h2>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-focus">Ждать окно игры</label><code class="tk">focus_wait_s</code></div>
+        <div class="row" style="gap: 12px"><input id="s-focus" data-range="focus_wait_s" data-unit="с" type="range" min="1" max="60" step="1"><output class="val" for="s-focus"></output></div>
+        <span class="err" data-error-for="focus_wait_s"></span>
+      </div>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-open">Пауза после открытия поля ввода</label><code class="tk">open_delay_ms</code></div>
+        <div class="row" style="gap: 12px"><input id="s-open" data-range="open_delay_ms" data-unit="мс" type="range" min="0" max="500" step="10"><output class="val" for="s-open"></output></div>
+        <span class="err" data-error-for="open_delay_ms"></span>
+      </div>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-part">Пауза между частями сообщения</label><code class="tk">part_delay_ms</code></div>
+        <div class="row" style="gap: 12px"><input id="s-part" data-range="part_delay_ms" data-unit="мс" type="range" min="100" max="2000" step="50"><output class="val" for="s-part"></output></div>
+        <span class="err" data-error-for="part_delay_ms"></span>
+      </div>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-key">Пауза между нажатиями клавиш</label><code class="tk">key_delay_ms</code></div>
+        <div class="row" style="gap: 12px"><input id="s-key" data-range="key_delay_ms" data-unit="мс" type="range" min="0" max="100" step="5"><output class="val" for="s-key"></output></div>
+        <span class="err" data-error-for="key_delay_ms"></span>
+      </div>
+      <button class="link" type="button" id="s-reset-timings">Вернуть значения по умолчанию</button>
+    </section>
+
+    <section class="panel" aria-label="Приложение">
+      <h2 class="ph">Приложение</h2>
+      <label class="sw" for="s-auto"><input id="s-auto" data-check="connect_on_start" type="checkbox"><span class="track"></span><span class="grow">Подключаться при запуске</span><code class="tk">connect_on_start</code></label>
+      <label class="sw" for="s-tray"><input id="s-tray" data-check="close_to_tray" type="checkbox"><span class="track"></span><span class="grow">Крестик сворачивает в трей</span><code class="tk">close_to_tray</code></label>
+      <label class="sw" for="s-boot"><input id="s-boot" data-check="autostart" type="checkbox"><span class="track"></span><span class="grow">Запускать вместе с Windows</span><code class="tk">autostart</code></label>
+      <div class="field" style="padding-top: 4px">
+        <span class="lbl">Файл настроек</span>
+        <div class="row"><code class="path" id="s-path"></code><button class="btn ghost sm" type="button" id="s-open-folder">Открыть папку</button></div>
+      </div>
+    </section>
+
+    <div class="savebar">
+      <span class="hint grow" id="s-dirty" role="status"></span>
+      <button class="btn ghost" type="button" id="s-cancel">Отменить</button>
+      <button class="btn" type="button" id="s-save">Сохранить</button>
+    </div>
+  </main>
+
+  <nav class="tabs" id="tabs" aria-label="Разделы" hidden>
+    <button class="tab" type="button" data-tab="status">Статус</button>
+    <button class="tab" type="button" data-tab="settings">Настройки</button>
+  </nav>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
