@@ -34,6 +34,10 @@ class UiState:
     setup_test: str = ""  # "" | "busy" | "ask" | "help" | "fail" | "ok"
     setup_voice: str = ""  # first message delivered after the test, shown in the checklist
     custom_style: str = ""  # last /style text, so the panel can switch back to it
+    lang: str = ""  # the language picked with /language or on the panel; "" = as in Telegram
+    tg_lang: str = ""  # the language of the player's Telegram app, as last seen
+    lang: str = ""  # the language picked with /language or on the panel; "" = as in Telegram
+    tg_lang: str = ""  # the language of the player's Telegram app, as last seen
 
 
 _UI_COLUMNS = tuple(f.name for f in fields(UiState))
@@ -61,9 +65,16 @@ class Store:
                    setup_msg_id INTEGER NOT NULL DEFAULT 0,
                    setup_test TEXT NOT NULL DEFAULT '',
                    setup_voice TEXT NOT NULL DEFAULT '',
-                   custom_style TEXT NOT NULL DEFAULT ''
+                   custom_style TEXT NOT NULL DEFAULT '',
+                   lang TEXT NOT NULL DEFAULT '',
+                   tg_lang TEXT NOT NULL DEFAULT ''
                ) STRICT"""
         )
+        # Databases made by an older version get the columns added since.
+        have = {row[1] for row in self.db.execute("PRAGMA table_info(ui_state)")}
+        for column in ("lang", "tg_lang"):
+            if column not in have:
+                self.db.execute(f"ALTER TABLE ui_state ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
         self._recent: defaultdict[int, deque[SentRecord]] = defaultdict(lambda: deque(maxlen=20))
 
     def get(self, user_id: int) -> UserSettings:
@@ -96,8 +107,8 @@ class Store:
         ).fetchone()
         if row is None:
             return UiState()
-        widgets, panel, setup, test, voice, style = row
-        return UiState(bool(widgets), panel, setup, test, voice, style)
+        widgets, *rest = row
+        return UiState(bool(widgets), *rest)
 
     def update_ui(self, user_id: int, **changes: object) -> UiState:
         if unknown := changes.keys() - set(_UI_COLUMNS):

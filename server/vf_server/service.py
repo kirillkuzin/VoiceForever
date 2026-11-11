@@ -67,7 +67,7 @@ class VoiceService:
         default = self.store.get(user_id).default_channel
         message = validate(message.channel, message.target, message.text, default)
         if not (parts := split_message(message.text, self.max_message_bytes)):
-            return Delivery(Ack(AckStatus.ERROR, "пустое сообщение"), message, [])
+            return Delivery(Ack(AckStatus.ERROR, "empty message"), message, [])
         ack = await self.hub.send(user_id, message, parts, voice_id)
         if ack.ok:
             self.store.remember(user_id, message.channel, message.target, message.text)
@@ -81,27 +81,27 @@ class VoiceService:
         the player sees the result in the game and in the agent window.
         """
         if upload.format != "wav":
-            return {"status": "bad_audio", "detail": f"формат {upload.format} не поддерживается"}
+            return {"status": "bad_audio", "detail": f"format {upload.format} is not supported"}
         try:
             duration_s = wav_duration_s(upload.audio)
         except (wave.Error, EOFError) as e:
-            return {"status": "bad_audio", "detail": f"не WAV: {e}"}
+            return {"status": "bad_audio", "detail": f"not a WAV file: {e}"}
         if duration_s * 1000 < MIN_VOICE_MS:
-            return {"status": "empty", "detail": "запись слишком короткая"}
+            return {"status": "empty", "detail": "the recording is too short"}
         if duration_s > self.max_voice_s:
-            return {"status": "too_long", "detail": f"запись длиннее {self.max_voice_s:g} с"}
+            return {"status": "too_long", "detail": f"the recording is longer than {self.max_voice_s:g} s"}
         try:
             transcript = await self.transcribe(user_id, upload.audio, "voice.wav")
         except TranscriptionError as e:
             log.error("STT failed for agent voice: %s", e)
-            return {"status": "stt_error", "detail": "не получилось распознать речь"}
+            return {"status": "stt_error", "detail": "speech recognition failed"}
         if not transcript:
-            return {"status": "empty", "detail": "не расслышал ни слова"}
+            return {"status": "empty", "detail": "no words heard"}
         result = await self.route(user_id, transcript)
         if result.decision is Decision.SKIP:
             return {
                 "status": "skip",
-                "detail": "не похоже на сообщение в чат",
+                "detail": "does not look like a chat message",
                 "transcript": transcript,
             } | message_fields(result.message)
         delivery = await self.deliver(user_id, result.message, upload.id)
@@ -116,7 +116,7 @@ class VoiceService:
 def wav_duration_s(audio: bytes) -> float:
     with wave.open(io.BytesIO(audio), "rb") as w:
         if w.getsampwidth() == 0 or w.getframerate() <= 0:
-            raise wave.Error("пустой заголовок")
+            raise wave.Error("empty header")
         return w.getnframes() / w.getframerate()
 
 

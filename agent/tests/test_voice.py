@@ -201,7 +201,7 @@ async def test_refused_voice_tells_the_addon(setup):
     await asyncio.sleep(0.35)
     pad.press("rightstick")
     await until(lambda: backend.pastes())
-    assert backend.pastes() == ["VF:status:empty:Не расслышал ни слова"]
+    assert backend.pastes() == ["VF:status:empty:Didn't catch a word"]
     assert of(events, VoiceResult)[0].status == "empty"
     assert pad.beeps == ["start", "stop", "error"]
 
@@ -268,7 +268,7 @@ async def test_bind_check_notices_another_button(setup):
     await until(lambda: of(events, BindCheck)[-1].step == "error")
     result = of(events, BindCheck)[-1]
     assert result.error == "wrong_button"
-    assert "Левый стик" in result.detail and "Правый стик" in result.detail
+    assert "Left stick" in result.detail and "Right stick" in result.detail
 
 
 async def test_capture_can_be_cancelled(setup):

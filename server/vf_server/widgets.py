@@ -5,11 +5,17 @@ a widget between states by editing its chat data (compact JSON, at most 1 KB). T
 back as widget queries of at most 64 bytes:
 
   card   s:<card>:<channel>[:<target>]  send, x:<card> cancel, u:<card> undo the cancel
-  panel  c:<channel>  default channel, f:0|1 confirm before sending, y:<style> message style
+  panel  c:<channel>  default channel, f:0|1 confirm before sending, y:<style> message style,
+         l:<lang> the bot's language
   setup  t  send the test line, ty the player saw it in the game, tn they did not
 
 The card answers a query with an error text when it cannot act on it (an empty answer
 means success); the other widgets ignore answers and wait for their chat data to change.
+
+The widgets' text comes from locales/<lang>.json: the HTML is sent with the player's
+language put in place of `L=/*L*/{}`. As the HTML cannot change after sending, a new
+language reaches the cards and the setup checklist sent from then on, and the pinned
+panel is sent again.
 """
 
 import asyncio
@@ -30,6 +36,7 @@ from aiogram.types import Message, ReplyParameters
 
 from .chat import Channel, ChatMessage
 from .hub import AckStatus
+from .i18n import LANGUAGES, SOURCE, from_code, strings, t
 from .service import Delivery, VoiceService
 from .tgwidgets import (
     MAX_DATA_BYTES,
@@ -45,28 +52,46 @@ WIDGET_WIDTH = 340  # layout hint; the bubble is 200-600 px wide
 TEST_LINE = "VoiceForever test"
 DEFAULT_CHANNELS = frozenset(Channel) - {Channel.WHISPER, Channel.CHANNEL, Channel.REPLY}
 
-ACK_TEXT: frozendict[AckStatus, str] = frozendict({
-    AckStatus.OFFLINE: "Агент на ПК не подключён. Запусти VoiceForever Agent.",
-    AckStatus.NOT_FOCUSED: "Окно WoW не было активным, сообщение не отправлено.",
-    AckStatus.TIMEOUT: "Агент не ответил вовремя. Проверь, отправилось ли сообщение.",
-    AckStatus.ERROR: "Агент не смог ввести текст",
+# Why a phrase did not reach the game, as keys of the bot's strings.
+ACK_KEYS: frozendict[AckStatus, str] = frozendict({
+    AckStatus.OFFLINE: "ack.offline",
+    AckStatus.NOT_FOCUSED: "ack.not_focused",
+    AckStatus.TIMEOUT: "ack.timeout",
+    AckStatus.ERROR: "ack.error",
 })
 
 # Message styles one tap away on the panel; any other /style text is the player's own.
+# These are instructions for the LLM, not text for people, so they stay as they are.
 STYLE_PRESETS: frozendict[str, str] = frozendict({
     "short": "Коротко и по делу, без лишних слов.",
     "rp": "Как реплика ролевого персонажа в фэнтезийном мире, без современного сленга.",
 })
 
-STALE_CARD = "Карточка устарела: скажи фразу ещё раз."
+# Which strings each widget gets: its own (without the prefix) and the shared ones.
+WIDGET_STRINGS: frozendict[str, tuple[str, ...]] = frozendict({
+    "card": ("card.", "chan."),
+    "panel": ("panel.", "chan.", "mode."),
+    "setup": ("setup.", "mode."),
+})
 
 type CardState = Literal["ask", "busy", "sent", "fail", "cancel"]
 type EditResult = Literal["ok", "gone", "error"]
 
 
 @cache
-def load_html(name: str) -> str:
-    return (resources.files("vf_server") / "html" / f"{name}.html").read_text(encoding="utf-8")
+def load_html(name: str, lang: str = SOURCE) -> str:
+    """A widget's HTML with its strings in `lang`."""
+    html = (resources.files("vf_server") / "html" / f"{name}.html").read_text(encoding="utf-8")
+    own = f"{name}."
+    table: dict[str, object] = {
+        key.removeprefix(own): text
+        for key, text in strings(lang).items()
+        if key.startswith(WIDGET_STRINGS[name])
+    }
+    if name == "panel":
+        table["langs"] = [[code, title] for code, title in LANGUAGES.items()]
+    # "</" inside a string would end the script element early.
+    return html.replace("L=/*L*/{}", "L=" + _dumps(table).replace("</", "<\\/"), 1)
 
 
 def fit(data: dict[str, object], shrink: tuple[str, ...] = ()) -> str:
@@ -92,8 +117,8 @@ def _dumps(data: dict[str, object]) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
 
 
-def failure_text(delivery: Delivery) -> str:
-    base = ACK_TEXT.get(delivery.ack.status, ACK_TEXT[AckStatus.ERROR])
+def failure_text(delivery: Delivery, lang: str) -> str:
+    base = t(lang, ACK_KEYS.get(delivery.ack.status, ACK_KEYS[AckStatus.ERROR]))
     return f"{base}: {delivery.ack.detail}" if delivery.ack.detail else base
 
 
@@ -177,6 +202,32 @@ class WidgetUI:
     def enabled(self, user_id: int) -> bool:
         return self.store.ui(user_id).widgets
 
+    def lang(self, uid: int, telegram_code: str | None = None) -> str:
+        """The player's language: the one they picked, else their Telegram app's, else English.
+
+        `telegram_code` is the language_code of an update from them; it is remembered, so
+        texts sent later without an update at hand (a widget refresh) use it too.
+        """
+        ui = self.store.ui(uid)
+        if telegram_code and telegram_code != ui.tg_lang:
+            ui = self.store.update_ui(uid, tg_lang=telegram_code)
+        if ui.lang in LANGUAGES:
+            return ui.lang
+        return from_code(ui.tg_lang) or SOURCE
+
+    def telegram_lang(self, uid: int) -> str:
+        """The language "as in Telegram" would give."""
+        return from_code(self.store.ui(uid).tg_lang) or SOURCE
+
+    async def set_lang(self, bot: Bot, uid: int, lang: str) -> str:
+        """Keep the player's pick ("" = as in Telegram) and resend the panel in it."""
+        before = self.lang(uid)
+        self.store.update_ui(uid, lang=lang if lang in LANGUAGES else "")
+        after = self.lang(uid)
+        if after != before:
+            await self.resend_panel(bot, uid)
+        return after
+
     # ------------------------------------------------------------------ card
     async def show_card(
         self, bot: Bot, message: Message, msg: ChatMessage, transcript: str, confirm: bool
@@ -196,7 +247,7 @@ class WidgetUI:
         try:
             sent = await bot(SendWidget(
                 chat_id=message.chat.id,
-                html=load_html("card"),
+                html=load_html("card", self.lang(uid)),
                 width=WIDGET_WIDTH,
                 chat_data=card.data(),
                 allow_queries=True,
@@ -235,7 +286,7 @@ class WidgetUI:
         if delivery.ack.ok:
             card.state, card.at = "sent", int(time.time())
         else:
-            card.state, card.error = "fail", failure_text(delivery)
+            card.state, card.error = "fail", failure_text(delivery, self.lang(card.user_id))
         await self._edit(bot, card.chat_id, card.message_id, card.data())
         await self.note_delivery(bot, card.user_id, delivery)
 
@@ -243,7 +294,7 @@ class WidgetUI:
         action, card_id, *rest = args
         card = self.cards.get(card_id)
         if card is None or card.user_id != uid:
-            await self._answer(bot, q, STALE_CARD)
+            await self._answer(bot, q, t(self.lang(uid), "widget.stale"))
             return
         match action, rest:
             case "s", [channel, *target] if channel in Channel:
@@ -264,7 +315,7 @@ class WidgetUI:
                     card.state = "ask"
                 await self._edit(bot, card.chat_id, card.message_id, card.data())
             case _:
-                await self._answer(bot, q, "Не понял нажатие, обнови Телеграм.")
+                await self._answer(bot, q, t(self.lang(uid), "widget.unknown"))
 
     # ------------------------------------------------------------------ panel
     def panel_data(self, uid: int) -> str:
@@ -289,6 +340,7 @@ class WidgetUI:
                 "cs": custom,
                 "tr": int(router is not None and router.allow_transform),
                 "n": s.known_names,
+                "lg": self.lang(uid),
             },
             shrink=("n", "cs"),
         )
@@ -299,7 +351,7 @@ class WidgetUI:
         try:
             sent = await bot(SendWidget(
                 chat_id=chat_id,
-                html=load_html("panel"),
+                html=load_html("panel", self.lang(uid)),
                 width=WIDGET_WIDTH,
                 chat_data=self.panel_data(uid),
                 allow_queries=True,
@@ -324,10 +376,25 @@ class WidgetUI:
         if await self._edit(bot, uid, msg_id, self.panel_data(uid)) == "gone":
             self.store.update_ui(uid, panel_msg_id=0)
 
+    async def resend_panel(self, bot: Bot, uid: int) -> None:
+        """Replace the pinned panel with a new one, for a new language."""
+        old = self.store.ui(uid).panel_msg_id
+        if not old or not self.enabled(uid) or not await self.send_panel(bot, uid, uid):
+            return
+        try:
+            await bot.delete_message(chat_id=uid, message_id=old)
+        except TelegramAPIError:  # too old to delete: let it show the new choice
+            await self._edit(bot, uid, old, self.panel_data(uid))
+
     async def _panel_query(self, bot: Bot, q: WidgetQuery, uid: int, args: list[str]) -> None:
         await self._answer(bot, q)
         router = self.service.router
         match args:
+            case ["l", lang] if lang in LANGUAGES:
+                if lang != self.lang(uid):
+                    await self.set_lang(bot, uid, lang)
+                    return
+                self.store.update_ui(uid, lang=lang)
             case ["c", channel] if channel in Channel and Channel(channel) in DEFAULT_CHANNELS:
                 self.store.update(uid, default_channel=Channel(channel))
             case ["f", "0" | "1" as flag]:
@@ -365,7 +432,7 @@ class WidgetUI:
         try:
             sent = await bot(SendWidget(
                 chat_id=chat_id,
-                html=load_html("setup"),
+                html=load_html("setup", self.lang(uid)),
                 width=WIDGET_WIDTH,
                 chat_data=self.setup_data(uid),
                 allow_queries=True,
@@ -392,7 +459,8 @@ class WidgetUI:
         if not delivery.ack.ok or ui.setup_test != "ok" or ui.setup_voice or not ui.setup_msg_id:
             return
         msg = delivery.message
-        self.store.update_ui(uid, setup_voice=f"[{msg.label()}] {msg.text}"[:200])
+        label = msg.label(self.lang(uid))
+        self.store.update_ui(uid, setup_voice=f"[{label}] {msg.text}"[:200])
         await self.refresh_setup(bot, uid)
         if not ui.panel_msg_id:
             await self.send_panel(bot, uid, uid)
@@ -407,7 +475,7 @@ class WidgetUI:
                 if delivery.ack.ok:
                     self.store.update_ui(uid, setup_test="ask")
                 else:
-                    self._test_error[uid] = failure_text(delivery)
+                    self._test_error[uid] = failure_text(delivery, self.lang(uid))
                     self.store.update_ui(uid, setup_test="fail")
             case ["ty"]:
                 self.store.update_ui(uid, setup_test="ok")
@@ -419,19 +487,21 @@ class WidgetUI:
     async def on_query(self, bot: Bot, q: WidgetQuery) -> None:
         uid = q.from_user.id
         if uid not in self.users:
-            await self._answer(bot, q, "Нет доступа.")
+            lang = from_code(q.from_user.language_code) or SOURCE
+            await self._answer(bot, q, t(lang, "widget.denied"))
             return
+        lang = self.lang(uid, q.from_user.language_code)
         args = q.data.split(":", 3)
         try:
             match args[0]:
                 case "s" | "x" | "u" if len(args) >= 2:
                     await self._card_query(bot, q, uid, args)
-                case "c" | "f" | "y":
+                case "c" | "f" | "y" | "l":
                     await self._panel_query(bot, q, uid, args)
                 case "t" | "ty" | "tn":
                     await self._setup_query(bot, q, uid, args)
                 case _:
-                    await self._answer(bot, q, "Не понял нажатие, обнови Телеграм.")
+                    await self._answer(bot, q, t(lang, "widget.unknown"))
         except Exception:
             log.exception("widget query %r from user %s failed", q.data, uid)
 

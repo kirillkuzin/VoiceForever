@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Self
 from urllib.parse import urlsplit
 
+from .i18n import LANGUAGES, t
 from .plan import MODIFIERS, Mode, parse_combo
 from .ptt import BY_NAME as PAD_BUTTONS
 from .ptt import PttMode
@@ -36,7 +37,8 @@ LIST_FIELDS = frozenset({"window_titles", "process_names"})
 
 
 class ConfigError(ValueError):
-    """One or more settings are wrong. `errors` maps a setting name to a message for the window."""
+    """One or more settings are wrong. `errors` maps a setting name to a message for the window,
+    in the window's language."""
 
     def __init__(self, errors: Mapping[str, str]) -> None:
         self.errors = dict(errors)
@@ -58,6 +60,7 @@ class AgentConfig:
     connect_on_start: bool = True
     close_to_tray: bool = True
     autostart: bool = False
+    language: str = ""  # "" = the Windows display language, or one of i18n.LANGUAGES
     ptt_enabled: bool = True
     ptt_button: str = "rightstick"
     ptt_mode: PttMode = PttMode.TOGGLE
@@ -75,25 +78,25 @@ class AgentConfig:
 
         url = values.get("server_url", "")
         if not isinstance(url, str) or not url.strip() or url.strip() == PLACEHOLDER_URL:
-            errors["server_url"] = "Укажи адрес сервера, например wss://vf.example.com/ws"
+            errors["server_url"] = t("cfg.server_url")
         else:
             url = values["server_url"] = url.strip()
             parts = urlsplit(url)
             if parts.scheme not in ("ws", "wss") or not parts.hostname:
-                errors["server_url"] = "Адрес должен начинаться с wss:// или ws://"
+                errors["server_url"] = t("cfg.server_url_scheme")
 
         token = values.get("token", "")
         if not isinstance(token, str) or PLACEHOLDER_TOKEN in token or not token.strip():
-            errors["token"] = "Вставь токен агента из VF_USERS на сервере"
+            errors["token"] = t("cfg.token")
         elif len(token.strip()) < MIN_TOKEN_LENGTH or any(c.isspace() for c in token.strip()):
-            errors["token"] = f"Токен из VF_USERS: не короче {MIN_TOKEN_LENGTH} символов, без пробелов"
+            errors["token"] = t("cfg.token_short", n=MIN_TOKEN_LENGTH)
         else:
             values["token"] = token.strip()
 
         try:
             values["mode"] = Mode(values.get("mode", Mode.ADDON))
         except ValueError:
-            errors["mode"] = 'Режим: "addon" или "chat"'
+            errors["mode"] = t("cfg.mode")
 
         hotkey = values.get("addon_hotkey", default["addon_hotkey"])
         try:
@@ -102,51 +105,56 @@ class AgentConfig:
                 raise ValueError
             values["addon_hotkey"] = "+".join(keys)
         except ValueError:
-            errors["addon_hotkey"] = "Нужна клавиша, например ctrl+shift+f12"
+            errors["addon_hotkey"] = t("cfg.hotkey")
 
         for name in LIST_FIELDS:
             if name not in values:
                 continue
             items = values[name]
             if not isinstance(items, (list, tuple)) or not all(isinstance(i, str) for i in items):
-                errors[name] = "Нужен список строк"
+                errors[name] = t("cfg.list")
             else:
                 values[name] = tuple(dict.fromkeys(i.strip() for i in items if i.strip()))
         if not errors.keys() & LIST_FIELDS:
             titles = values.get("window_titles", default["window_titles"])
             processes = values.get("process_names", default["process_names"])
             if not titles and not processes:
-                errors["process_names"] = "Нужно хотя бы одно название окна или процесс игры"
+                errors["process_names"] = t("cfg.window_or_process")
 
         for name, (low, high) in LIMITS.items():
             if name not in values:
                 continue
             number = values[name]
             if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
-                errors[name] = "Нужно число"
+                errors[name] = t("cfg.number")
             elif not low <= number <= high:
-                errors[name] = f"Допустимо от {low:g} до {high:g}"
+                errors[name] = t("cfg.range", low=f"{low:g}", high=f"{high:g}")
             elif name in INT_FIELDS:
                 values[name] = round(number)
 
         for name in BOOL_FIELDS:
             if name in values and not isinstance(values[name], bool):
-                errors[name] = "Нужно true или false"
+                errors[name] = t("cfg.bool")
 
         button = values.get("ptt_button", default["ptt_button"])
         if not isinstance(button, str) or button.strip().lower() not in PAD_BUTTONS:
-            errors["ptt_button"] = "Кнопка геймпада: " + ", ".join(PAD_BUTTONS)
+            errors["ptt_button"] = t("cfg.ptt_button", buttons=", ".join(PAD_BUTTONS))
         else:
             values["ptt_button"] = button.strip().lower()
         try:
             values["ptt_mode"] = PttMode(values.get("ptt_mode", PttMode.TOGGLE))
         except ValueError:
-            errors["ptt_mode"] = 'Режим записи: "toggle" (нажал и нажал ещё раз) или "hold" (держишь)'
+            errors["ptt_mode"] = t("cfg.ptt_mode")
         mic = values.get("mic_device", "")
         if not isinstance(mic, str):
-            errors["mic_device"] = "Нужно название микрофона или пустая строка"
+            errors["mic_device"] = t("cfg.mic")
         else:
             values["mic_device"] = mic.strip()
+        language = values.get("language", "")
+        if not isinstance(language, str) or language.strip().lower() not in {"", *LANGUAGES}:
+            errors["language"] = t("cfg.language", codes=", ".join(LANGUAGES))
+        else:
+            values["language"] = language.strip().lower()
 
         if errors:
             raise ConfigError(errors)
@@ -158,7 +166,7 @@ class AgentConfig:
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8-sig"))
         except tomllib.TOMLDecodeError as e:
-            raise ConfigError({"file": f"config.toml не читается: {e}"}) from None
+            raise ConfigError({"file": t("cfg.unreadable", error=e)}) from None
         return cls.from_dict(data)
 
     def to_dict(self) -> dict[str, Any]:
@@ -183,6 +191,7 @@ COMMENTS: frozendict[str, str] = frozendict({
     "focus_wait_s": "Wait this long for you to switch back to the game before giving up (seconds)",
     "open_delay_ms": "Pauses (milliseconds)",
     "connect_on_start": "Window and tray",
+    "language": 'Window language: "" = as in Windows, or ' + ", ".join(LANGUAGES),
     "ptt_enabled": (
         "Push-to-talk: record your voice with a gamepad button and send it to the server\n"
         'ptt_button: rightstick, leftstick, misc1 (Xbox Share), back (View), a, b, x, y, dpup, ...\n'
@@ -237,7 +246,7 @@ def load_draft(path: Path) -> tuple[AgentConfig | None, dict[str, Any], dict[str
     try:
         raw = tomllib.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, tomllib.TOMLDecodeError) as e:
-        return None, draft, {"file": f"config.toml не читается: {e}"}
+        return None, draft, {"file": t("cfg.unreadable", error=e)}
     try:
         config = AgentConfig.from_dict(raw)
     except ConfigError as e:
@@ -247,6 +256,15 @@ def load_draft(path: Path) -> tuple[AgentConfig | None, dict[str, Any], dict[str
                 draft[key] = ""
         return None, draft, e.errors
     return config, config.to_dict(), {}
+
+
+def peek_language(path: Path) -> str:
+    """The language setting alone, read before the rest so problems are reported in it."""
+    try:
+        value = tomllib.loads(path.read_text(encoding="utf-8-sig")).get("language", "")
+    except (OSError, tomllib.TOMLDecodeError):
+        return ""
+    return value.strip().lower() if isinstance(value, str) and value.strip().lower() in LANGUAGES else ""
 
 
 def default_path() -> Path:

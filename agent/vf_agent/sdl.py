@@ -184,7 +184,7 @@ class SDL:
             except OSError as e:
                 errors.append(f"{candidate}: {e}")
         else:
-            raise SDLError("SDL3 не найден: " + ("; ".join(errors) or library_name()))
+            raise SDLError("SDL3 not found: " + ("; ".join(errors) or library_name()))
         for name, (restype, argtypes) in SIGNATURES.items():
             fn = getattr(self.lib, name)
             fn.restype, fn.argtypes = restype, argtypes

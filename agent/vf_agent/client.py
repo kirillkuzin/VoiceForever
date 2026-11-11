@@ -27,6 +27,7 @@ from websockets.exceptions import (
 
 from . import __version__, audio
 from .config import AgentConfig
+from .i18n import t
 from .plan import Action, GameState, Mode, SendCommand, build_actions
 
 log = logging.getLogger("vf_agent")
@@ -94,7 +95,7 @@ class VoiceResult:
     status: str
     channel: str = ""
     target: str = ""
-    label: str = ""  # channel name for people, e.g. "Гильдия" or "Шёпот: Арторн"
+    label: str = ""  # the server's channel name for people, e.g. "Guild" or "Whisper → Arthorn"
     text: str = ""  # what was typed (or would have been)
     transcript: str = ""  # what speech recognition heard
     detail: str = ""
@@ -172,23 +173,23 @@ def describe(error: BaseException) -> str:
     """Short reason for a failed connection, for the window and the log."""
     match error:
         case InvalidStatus():
-            return f"сервер ответил HTTP {error.response.status_code}"
+            return t("net.http", code=error.response.status_code)
         case InvalidURI():
-            return "неверный адрес сервера"
+            return t("net.bad_uri")
         case InvalidHandshake():
-            return "по этому адресу не WebSocket-сервер"
+            return t("net.not_websocket")
         case ConnectionClosed():
-            return "соединение оборвалось"
+            return t("net.closed")
         case TimeoutError():
-            return f"сервер не ответил за {OPEN_TIMEOUT_S} с"
+            return t("net.timeout", s=OPEN_TIMEOUT_S)
         case socket.gaierror():
-            return "адрес сервера не найден"
+            return t("net.not_found")
         case ssl.SSLCertVerificationError():
-            return f"сертификат сервера не прошёл проверку: {error.verify_message}"
+            return t("net.certificate", error=error.verify_message)
         case ssl.SSLError():
-            return f"ошибка TLS: {error.reason or error}"
+            return t("net.tls", error=error.reason or error)
         case ConnectionRefusedError():
-            return "сервер отказал в подключении"
+            return t("net.refused")
         case OSError() if error.strerror:
             return error.strerror
         case _:
@@ -234,7 +235,7 @@ class Agent:
     async def type_control(self, channel: str, target: str, text: str) -> Ack:
         """Type a line for the addon itself (push-to-talk setup, in-game badge). Addon mode only."""
         if self.config.mode != Mode.ADDON:
-            return {"type": "ack", "id": "", "status": "error", "detail": "нужен режим addon"}
+            return {"type": "ack", "id": "", "status": "error", "detail": t("net.needs_addon")}
         cmd = SendCommand(f"{channel}-{uuid.uuid4().hex[:8]}", channel, target, (text,))
         return await self._type(cmd)
 
@@ -243,7 +244,7 @@ class Agent:
         voice_id = uuid.uuid4().hex[:16]
         ws = self._ws
         if ws is None:
-            result = VoiceResult(voice_id, "offline", detail="нет связи с сервером")
+            result = VoiceResult(voice_id, "offline", detail=t("net.offline"))
         else:
             future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
             self._voice_waiters[voice_id] = future
@@ -253,9 +254,9 @@ class Agent:
                 async with asyncio.timeout(VOICE_TIMEOUT_S):
                     result = VoiceResult.from_json(voice_id, await future)
             except ConnectionClosed:
-                result = VoiceResult(voice_id, "offline", detail="связь с сервером оборвалась")
+                result = VoiceResult(voice_id, "offline", detail=t("net.dropped"))
             except TimeoutError:
-                result = VoiceResult(voice_id, "timeout", detail="сервер не ответил вовремя")
+                result = VoiceResult(voice_id, "timeout", detail=t("net.voice_timeout"))
             finally:
                 self._voice_waiters.pop(voice_id, None)
         log.info("voice %s: %s %s", voice_id, result.status, result.detail)
@@ -264,7 +265,7 @@ class Agent:
 
     async def _type(self, cmd: SendCommand) -> Ack:
         if not cmd.parts:
-            return ack(cmd, "error", "пустое сообщение")
+            return ack(cmd, "error", t("net.empty"))
         async with self._typing:
             if not await self.wait_for_focus():
                 return ack(cmd, "not_focused")
@@ -339,13 +340,13 @@ class Agent:
                         await self.serve(ws)
                     if ws.close_reason == REPLACED_REASON:
                         log.warning("another agent connected with this token")
-                        self._emit(Status(ConnState.REPLACED, "с этим токеном подключился другой агент"))
-                        raise ReplacedError("с этим токеном подключился другой агент")
-                    reason = "сервер закрыл соединение"
+                        self._emit(Status(ConnState.REPLACED, t("net.replaced")))
+                        raise ReplacedError(t("net.replaced"))
+                    reason = t("net.server_closed")
                 except InvalidStatus as e:
                     if e.response.status_code in (401, 403):
                         self._emit(Status(ConnState.AUTH_FAILED, describe(e)))
-                        raise AuthError("сервер не принял токен агента") from e
+                        raise AuthError(t("net.auth")) from e
                     reason = describe(e)
                 except (OSError, TimeoutError, WebSocketException) as e:
                     reason = describe(e)

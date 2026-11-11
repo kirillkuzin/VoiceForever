@@ -119,7 +119,7 @@ async def test_voice_is_typed_and_reported():
     [result] = results
     assert result["type"] == "voice_result" and result["id"] == "v1"
     assert result["status"] == "ok"
-    assert (result["channel"], result["label"], result["text"]) == ("guild", "Гильдия", "Всем привет")
+    assert (result["channel"], result["label"], result["text"]) == ("guild", "Guild", "Всем привет")
     assert result["transcript"] == "в гильдию всем привет"
 
 

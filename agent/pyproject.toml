@@ -20,7 +20,7 @@ build-backend = "setuptools.build_meta"
 packages = ["vf_agent", "vf_agent.gui"]
 
 [tool.setuptools.package-data]
-vf_agent = ["ui/*.*", "ui/fonts/*"]
+vf_agent = ["ui/*.*", "ui/fonts/*", "ui/locales/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

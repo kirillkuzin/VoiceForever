@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import audio, sdl
+from .i18n import t
 from .ptt import BY_SDL
 
 log = logging.getLogger("vf_agent")
@@ -99,7 +100,7 @@ class Devices:
     def _submit(self, fn: Callable[..., Any], *args: Any) -> Future[Any]:
         future: Future[Any] = Future()
         if self.error is not None or not self._thread.is_alive():
-            future.set_exception(RuntimeError(self.error or "геймпад и микрофон не запущены"))
+            future.set_exception(RuntimeError(self.error or t("pad.not_running")))
         else:
             self._jobs.put((fn, args, future))
         return future
@@ -127,7 +128,7 @@ class Devices:
                 time.sleep(POLL_S)
         except Exception:
             log.exception("gamepad and microphone thread failed")
-            self.error = "геймпад и микрофон остановились, подробности в журнале"
+            self.error = t("pad.stopped")
         finally:
             self._shutdown()
 
@@ -172,7 +173,7 @@ class Devices:
         if not handle:
             log.warning("cannot open gamepad %s: %s", which, s.error())
             return
-        pad = Pad(s.text(s.SDL_GetGamepadName(handle)) or "Геймпад", s.SDL_GetGamepadType(handle) in sdl.PLAYSTATION_TYPES)
+        pad = Pad(s.text(s.SDL_GetGamepadName(handle)) or t("pad.default_name"), s.SDL_GetGamepadType(handle) in sdl.PLAYSTATION_TYPES)
         self._pads[which] = (handle, pad)
         log.info("gamepad connected: %s", pad.name)
         self.pad = pad
@@ -210,10 +211,10 @@ class Devices:
         spec = sdl.AudioSpec(sdl.AUDIO_S16LE, 1, audio.RATE)
         stream = s.SDL_OpenAudioDeviceStream(devid, ctypes.byref(spec), None, None)
         if not stream:
-            raise RuntimeError(f"микрофон не открылся: {s.error()}")
+            raise RuntimeError(t("mic.open_failed", error=s.error()))
         if not s.SDL_ResumeAudioStreamDevice(stream):
             s.SDL_DestroyAudioStream(stream)
-            raise RuntimeError(f"микрофон не запустился: {s.error()}")
+            raise RuntimeError(t("mic.start_failed", error=s.error()))
         self._rec = _Recording(stream, used, keep, bytearray())
         return used
 

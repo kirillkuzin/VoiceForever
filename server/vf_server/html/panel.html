@@ -17,6 +17,7 @@ button{min-height:44px;border-radius:4px;font:700 14px system-ui,sans-serif;curs
 .c.w{border-color:#dcb563;animation:p .8s ease-in-out infinite}
 .c[disabled]{opacity:.5}
 .c:active{filter:brightness(1.3)}
+.l{grid-template-columns:repeat(3,minmax(0,1fr))}
 @keyframes p{50%{filter:brightness(1.5)}}
 .d{width:8px;height:8px;flex:none;border-radius:50%}
 .a{align-self:flex-start;min-height:0;padding:0;border:0;background:none;font:500 13px system-ui,sans-serif;color:#e8c46e;text-decoration:underline}
@@ -29,25 +30,27 @@ button{min-height:44px;border-radius:4px;font:700 14px system-ui,sans-serif;curs
 </style>
 <div id="r"></div>
 <script>
-var W=window.TelegramWidget,R=document.querySelector('#r'),d={},w='',more=0,
-C={say:['Сказать','#f3eee6'],group:['Группа','#aab4ff'],guild:['Гильдия','#56e06a'],raid:['Рейд','#ff9c5a'],yell:['Крик','#ff5c5c'],instance:['Подземелье','#ff9c5a'],officer:['Офицеры','#40c860'],emote:['Эмоция','#ff9c5a']},
-S=[['off','Как есть','Правлю только пунктуацию.'],['short','Коротко','Убираю лишние слова.'],['rp','Ролевой','Пишу в духе персонажа.'],['custom','Свой','']];
+var W=window.TelegramWidget,R=document.querySelector('#r'),L=/*L*/{},d={},w='',more=0,
+C={say:'#f3eee6',group:'#aab4ff',guild:'#56e06a',raid:'#ff9c5a',yell:'#ff5c5c',instance:'#ff9c5a',officer:'#40c860',emote:'#ff9c5a'};
+function T(k,v){return String(L[k]||k).replace(/\{(\w+)\}/g,function(m,n){return v&&n in v?v[n]:m})}
 function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
 function hm(t){var x=new Date(t*1e3);return('0'+x.getHours()).slice(-2)+':'+('0'+x.getMinutes()).slice(-2)}
 function load(){d=JSON.parse(W.chatData||'{}');w='';draw()}
-function chip(k){var c=C[k];return'<button class="c'+(w=='c:'+k?' w':d.c==k?' on':'')+'" onclick="go(\'c:'+k+'\')"><span class="d" style="background:'+c[1]+'"></span>'+c[0]+'</button>'}
+function chip(k){return'<button class="c'+(w=='c:'+k?' w':d.c==k?' on':'')+'" onclick="go(\'c:'+k+'\')"><span class="d" style="background:'+C[k]+'"></span>'+T('chan.'+k)+'</button>'}
+function fit(){[].forEach.call(R.querySelectorAll('.c'),function(b){for(var f=14;b.scrollWidth>b.clientWidth&&f>11;)b.style.fontSize=--f+'px';var d=b.querySelector('.d');if(d&&b.scrollWidth>b.clientWidth)d.style.display='none'})}
 function draw(){
-var on=d.on,h='<div class="h">VoiceForever<i></i><span style="font:500 12px system-ui,sans-serif;color:#a89a7e">пульт</span></div>';
-h+='<div class="st"><span class="o" style="background:radial-gradient(circle at 36% 30%,rgba(255,255,255,.75) 0 7%,'+(on?'#5ed474 34%,#1d6b2c':'#a59a88 34%,#3a342b')+' 100%)"></span><div><div class="ot" style="color:'+(on?'#5ed474':'#a59a88')+'">'+(on?'Агент на связи':'Агент не подключён')+'</div><div class="hn">'+(on?'Агент '+e(d.v)+' на ПК, '+(d.md=='chat'?'обычный чат':'режим аддона')+(d.since?'. С '+hm(d.since)+'.':'.'):'Голосовые не дойдут до игры. Запусти VoiceForever Agent на ПК.')+'</div></div></div><div class="sp"></div>';
-h+='<div class="sh">Канал по умолчанию</div><div class="g">'+['say','group','guild','raid'].map(chip).join('')+'</div>';
-h+=more||['yell','instance','officer','emote'].indexOf(d.c)>=0?'<div class="g">'+['yell','instance','officer','emote'].map(chip).join('')+'</div>':'<button class="a" onclick="more=1;draw()">Ещё каналы</button>';
-h+='<div class="hn">Куда идёт фраза, если по смыслу канал не понятен.</div><div class="sp"></div>';
-h+='<button class="sw" onclick="go(\'f:'+(d.cf?0:1)+'\')"><span class="t'+(d.cf?' on':'')+'"></span><span><span>Спрашивать перед отправкой</span><br><span class="hn">'+(d.cf?'Сначала карточка с кнопкой «Отправить».':'Фраза сразу уходит в игру.')+'</span></span></button><div class="sp"></div>';
-h+='<div class="sh">Стиль сообщений</div>';
-if(!d.tr)h+='<div class="hn sa">Переписывание выключено на этом сервере, правлю только пунктуацию.</div>';
-else{var hint='';h+='<div class="g">'+S.map(function(s){if(d.st==s[0])hint=s[2]||'Сейчас: «'+e(d.cs)+'».';return'<button class="c'+(w=='y:'+s[0]?' w':d.st==s[0]?' on':'')+'"'+(s[0]=='custom'&&!d.cs?' disabled':'')+' onclick="go(\'y:'+s[0]+'\')">'+s[1]+'</button>'}).join('')+'</div>';
-h+='<div class="hn sa">'+hint+' Свой стиль: /style как орк-шаман. Ники: '+(e(d.n)||'нет')+' (/names).</div>'}
-R.innerHTML=h}
+var on=d.on,v={version:e(d.v),mode:T('mode.'+(d.md=='chat'?'chat':'addon')),time:hm(d.since)},h='<div class="h">VoiceForever<i></i><span style="font:500 12px system-ui,sans-serif;color:#a89a7e">'+T('title')+'</span></div>';
+h+='<div class="st"><span class="o" style="background:radial-gradient(circle at 36% 30%,rgba(255,255,255,.75) 0 7%,'+(on?'#5ed474 34%,#1d6b2c':'#a59a88 34%,#3a342b')+' 100%)"></span><div><div class="ot" style="color:'+(on?'#5ed474':'#a59a88')+'">'+T(on?'online':'offline')+'</div><div class="hn">'+T(on?d.since?'online_since':'online_hint':'offline_hint',v)+'</div></div></div><div class="sp"></div>';
+h+='<div class="sh">'+T('channel')+'</div><div class="g">'+['say','group','guild','raid'].map(chip).join('')+'</div>';
+h+=more||['yell','instance','officer','emote'].indexOf(d.c)>=0?'<div class="g">'+['yell','instance','officer','emote'].map(chip).join('')+'</div>':'<button class="a" onclick="more=1;draw()">'+T('more')+'</button>';
+h+='<div class="hn">'+T('channel_hint')+'</div><div class="sp"></div>';
+h+='<button class="sw" onclick="go(\'f:'+(d.cf?0:1)+'\')"><span class="t'+(d.cf?' on':'')+'"></span><span><span>'+T('confirm')+'</span><br><span class="hn">'+T(d.cf?'confirm_on':'confirm_off')+'</span></span></button><div class="sp"></div>';
+h+='<div class="sh">'+T('style')+'</div>';
+if(!d.tr)h+='<div class="hn">'+T('style_disabled')+'</div>';
+else{var hint='';h+='<div class="g">'+['off','short','rp','custom'].map(function(k){if(d.st==k)hint=T('style_'+k+'_hint',{style:e(d.cs)});return'<button class="c'+(w=='y:'+k?' w':d.st==k?' on':'')+'"'+(k=='custom'&&!d.cs?' disabled':'')+' onclick="go(\'y:'+k+'\')">'+T('style_'+k)+'</button>'}).join('')+'</div>';
+h+='<div class="hn">'+hint+' '+T('style_tip',{names:e(d.n)||T('no_names')})+'</div>'}
+h+='<div class="sp"></div><div class="sh">'+T('language')+'</div><div class="g l">'+L.langs.map(function(x){return'<button class="c'+(w=='l:'+x[0]?' w':d.lg==x[0]?' on':'')+'" onclick="go(\'l:'+x[0]+'\')">'+x[1]+'</button>'}).join('')+'</div>';
+R.innerHTML=h;fit()}
 function go(q){w=q;draw();W.request(q).then(function(){},function(){w='';draw()})}
 W.onEvent('chatDataChanged',load);load();if(W.ready)W.ready()
 </script>
