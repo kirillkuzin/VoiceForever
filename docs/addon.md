@@ -2,7 +2,7 @@
 
 The addon is an invisible input field inside the game. The Windows app presses the addon's hotkey, pastes a line and presses Enter; the addon posts it to the right channel. The chat window never opens, the addon picks party, raid or instance chat by itself and replies to the last whisper. While you record from the gamepad it shows a recording badge in the game.
 
-The addon has no network access: everything reaches it as keyboard input.
+The addon has no network access: everything reaches it as keyboard input. Its messages follow the language of your WoW client: English, Russian, German, Spanish or French (English for any other).
 
 ## Install
 

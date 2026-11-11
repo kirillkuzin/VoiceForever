@@ -17,7 +17,7 @@ The window needs the Microsoft Edge WebView2 Runtime. Windows 11 already has it,
 On first launch a four-step setup opens:
 
 1. **Server**: the server address `wss://<domain>/ws` and the agent token (the part after the colon for your Telegram ID in `VF_USERS`). The agent checks the connection right away.
-2. **Input**: with the VoiceForever addon (recommended) or plain chat.
+2. **Mode**: with the VoiceForever addon (recommended) or plain chat.
 3. **Voice**: the microphone, with a level meter, and the gamepad button that starts recording.
 4. **Check**: the in-game check of the button (see below) and a test phrase.
 
@@ -26,7 +26,7 @@ On first launch a four-step setup opens:
 After that the window has two tabs:
 
 - **Status**: whether the agent is connected, with disconnect, reconnect and connect buttons; whether the game window is active; the gamepad and recording state; the last messages, each marked with whether it reached the game. "Test in /say" types a test line.
-- **Settings**: everything in `config.toml` (server, token, input mode, addon hotkey, voice, game window, typing delays). A button finds the WoW window and process for you. If you change the address, the token or the mode, the agent reconnects by itself.
+- **Settings**: everything in `config.toml` (server, token, input mode, addon key, voice, game window, typing delays, language). The ⓘ icon next to a setting explains it. **Detect automatically** finds the WoW window and process for you. If you change the address, the token or the mode, the agent reconnects by itself.
 
 ![The settings tab](images/agent-settings.png)
 
@@ -34,8 +34,8 @@ After that the window has two tabs:
 
 Xbox and DualSense controllers work, over USB or Bluetooth, and the agent sees them even when the game window is in the background. By default clicking the right stick starts recording:
 
-- Toggle (`ptt_mode = "toggle"`): press, speak, press again. A recording never runs longer than `max_record_s` (30 s); then it is sent by itself.
-- Hold (`ptt_mode = "hold"`): you speak while you hold the button.
+- **Toggle** (`ptt_mode = "toggle"`): press, speak, press again. A recording never runs longer than `max_record_s` (30 s); then it is sent by itself.
+- **Hold** (`ptt_mode = "hold"`): you speak while you hold the button.
 
 Recording starts only while the WoW window is active. Anything shorter than 0.3 s counts as an accidental press and goes nowhere. The agent beeps at the start and the end (`ptt_sounds`), the tray icon turns red while recording, and the addon shows a badge in the game: "recording", then "recognising", then where the text went. You can drag the badge with the mouse.
 
@@ -44,6 +44,10 @@ The addon takes the button over: in WoW Forever the right stick places pings, an
 The server recognises the speech the same way as Telegram voice messages, and Claude picks the channel the same way. The server accepts recordings up to `VF_MAX_VOICE_S` (60 s).
 
 The agent reads the gamepad and the microphone through [SDL3](https://libsdl.org) (zlib license); `SDL3.dll` is already inside the exe. Gamepad voice works in the windowed app only; `--headless` does not enable it.
+
+## Language
+
+The window, the tray and the messages speak English, Russian, German, Spanish and French. The agent starts in the Windows display language (English if it is none of these) and you can switch it with the globe button in the title bar or in Settings → App. In `config.toml` it is `language = ""` (follow Windows) or one of `en`, `ru`, `de`, `es`, `fr`.
 
 ## Tray
 

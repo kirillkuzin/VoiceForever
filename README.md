@@ -33,9 +33,11 @@ WoW Forever plays great on a gamepad, right up until someone asks you something 
 
 ## What you get
 
-- **A Windows app** that sits in the tray while you play. It shows whether it is connected, sees your gamepad even when the game is in the background, and lists your last messages with a mark for each one that reached the game. Setup takes four steps: server, input, voice and a check in the game.
+- **A Windows app** that sits in the tray while you play. It shows whether it is connected, sees your gamepad even when the game is in the background, and lists your last messages with a mark for each one that reached the game. Setup takes four steps: server, mode, voice and a check in the game.
 - **An in-game addon.** The chat window never opens: the addon picks party, raid or instance chat by itself, replies to the last whisper and shows a recording badge.
-- **A Telegram bot** for voice messages from your phone. Every message gets a card with its channel and delivery status, and a pinned panel holds your default channel, confirmation and message style.
+- **A Telegram bot** for voice messages from your phone. Every message gets a card with its channel and delivery status, and a pinned panel holds your default channel, confirmation, message style and language.
+
+The app, the bot and the addon speak English, Russian, German, Spanish and French, and start in the language of your Windows, Telegram app and game client.
 
 <p align="center">
   <img src="docs/images/agent-wizard-voice.png" width="300" alt="First-run setup, step 3: choosing the microphone and the gamepad button">

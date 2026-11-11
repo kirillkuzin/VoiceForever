@@ -7,7 +7,9 @@ Telegram is needed, and the pictures always match the current UI.
     uv run --no-project --python 3.13 --with playwright playwright install chromium   # once
     uv run --no-project --python 3.13 --with playwright python docs/images/render.py
 
-Set VF_CHROMIUM to use a Chromium binary that is already installed.
+Set VF_CHROMIUM to use a Chromium binary that is already installed, and VF_LANG to render
+another language (en, ru, de, es, fr; default en). The UI words come from the same
+locales/<lang>.json tables the app and the bot use; only the sample messages below are ours.
 """
 
 import json
@@ -21,13 +23,49 @@ from playwright.sync_api import Page, sync_playwright
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 AGENT_PAGE = ROOT / "agent" / "vf_agent" / "ui" / "index.html"
+AGENT_LOCALES = ROOT / "agent" / "vf_agent" / "ui" / "locales"
 WIDGETS = ROOT / "server" / "vf_server" / "html"
+SERVER_LOCALES = ROOT / "server" / "vf_server" / "locales"
+
+SOURCE = "en"
+LANGUAGES = {"en": "English", "ru": "Русский", "de": "Deutsch", "es": "Español", "fr": "Français"}
+LANG = os.environ.get("VF_LANG", SOURCE)
 
 NOW = datetime(2026, 11, 11, 21, 30, tzinfo=UTC)
 T = NOW.timestamp()
 SCALE = 2
 WINDOW = {"width": 480, "height": 720}  # gui/app.py WIDTH, HEIGHT
 WIDGET_WIDTH = 340  # widgets.py WIDGET_WIDTH
+
+
+def strings(folder: Path, lang: str) -> dict[str, str]:
+    """Like i18n.strings in the agent and the server: English, overlaid with `lang`."""
+    table = json.loads((folder / f"{SOURCE}.json").read_text(encoding="utf-8"))
+    if lang != SOURCE:
+        table |= json.loads((folder / f"{lang}.json").read_text(encoding="utf-8"))
+    return table
+
+
+# Sample messages: (spoken phrase, channel, target, text in chat). Names are made up.
+SAMPLES = {
+    "en": {
+        "names": ["Arthorn", "Liana", "Morwen"],
+        "party": ("party boss in one minute", "Boss in 1 minute"),
+        "whisper": ("whisper arthorn where are we meeting", "Where are we meeting?"),
+        "guild": ("tell the guild i'll be back in five minutes", "Back in 5 minutes"),
+        "skip": "wait hold on a second",
+        "trade": ("trade selling copper ore", "Selling copper ore"),
+    },
+    "ru": {
+        "names": ["Арторн", "Лиана", "Морвен"],
+        "party": ("в пати иду на босса через минуту", "Иду на босса через минуту"),
+        "whisper": ("шепни арторну где встречаемся", "Где встречаемся?"),
+        "guild": ("скажи в гильдию что я отойду на пять минут", "Отойду на 5 минут"),
+        "skip": "так подожди я сейчас",
+        "trade": ("в трейд продам медную руду", "Продам медную руду"),
+    },
+}
+SAMPLE = SAMPLES.get(LANG, SAMPLES[SOURCE])
 
 # --------------------------------------------------------------------------- the agent
 
@@ -45,6 +83,7 @@ CONFIG = {
     "connect_on_start": True,
     "close_to_tray": True,
     "autostart": False,
+    "language": LANG,
     "ptt_enabled": True,
     "ptt_button": "rightstick",
     "ptt_mode": "toggle",
@@ -53,13 +92,15 @@ CONFIG = {
     "ptt_sounds": True,
 }
 
+AGENT_STRINGS = strings(AGENT_LOCALES, LANG)
 PAD_BUTTONS = [
-    {"name": "rightstick", "xbox": "Правый стик (RS)", "playstation": "Правый стик (R3)"},
-    {"name": "leftstick", "xbox": "Левый стик (LS)", "playstation": "Левый стик (L3)"},
+    {"name": name, "xbox": AGENT_STRINGS[f"padbtn.{name}"],
+     "playstation": AGENT_STRINGS.get(f"padbtn.{name}.ps") or AGENT_STRINGS[f"padbtn.{name}"]}
+    for name in ("rightstick", "leftstick")
 ]
 
 PAD = {"connected": True, "name": "Xbox Wireless Controller", "playstation": False, "error": ""}
-MICS = ["Headset Microphone (Xbox Wireless Headset)", "Микрофон (Realtek High Definition Audio)"]
+MICS = ["Headset Microphone (Xbox Wireless Headset)", "Microphone (Realtek High Definition Audio)"]
 
 
 def voice(at: float, channel: str, target: str, label: str, text: str, transcript: str, status: str = "ok") -> dict:
@@ -72,24 +113,29 @@ def typed(at: float, channel: str, target: str, text: str, status: str = "ok") -
             "detail": "", "at": at, "voice_id": ""}
 
 
-# Newest first, as the agent keeps them.
+# Newest first, as the agent keeps them. The page draws the channel names itself.
 HISTORY = [
-    voice(T - 40, "group", "", "Группа", "Иду на босса через минуту", "в пати иду на босса через минуту"),
-    voice(T - 260, "whisper", "Арторн", "Шёпот: Арторн", "Где встречаемся?", "шепни арторну где встречаемся"),
-    typed(T - 610, "guild", "", "Отойду на 5 минут"),
-    voice(T - 900, "", "", "", "", "так подожди я сейчас", status="skip"),
-    voice(T - 1500, "channel", "2", "Канал 2", "Продам медную руду", "в трейд продам медную руду"),
+    voice(T - 40, "group", "", "", SAMPLE["party"][1], SAMPLE["party"][0]),
+    voice(T - 260, "whisper", SAMPLE["names"][0], "", SAMPLE["whisper"][1], SAMPLE["whisper"][0]),
+    typed(T - 610, "guild", "", SAMPLE["guild"][1]),
+    voice(T - 900, "", "", "", "", SAMPLE["skip"], status="skip"),
+    voice(T - 1500, "channel", "2", "", SAMPLE["trade"][1], SAMPLE["trade"][0]),
 ]
 
 
 def agent_state(first_run: bool) -> dict:
     return {
+        "language": LANG,
+        "lang": LANG,
+        "system_lang": LANG,
+        "strings": AGENT_STRINGS,
+        "languages": [{"code": code, "name": name} for code, name in LANGUAGES.items()],
         "version": "0.3.0",
         "configured": not first_run,
         "first_run": first_run,
         "config": CONFIG,
         "errors": {},
-        "defaults": CONFIG | {"server_url": "", "token": ""},
+        "defaults": CONFIG | {"server_url": "", "token": "", "language": ""},
         "config_path": r"C:\Users\Player\AppData\Roaming\VoiceForever\config.toml",
         "seq": 1,
         "status": ({"state": "disconnected", "detail": "", "attempt": 0, "retry_at": None, "since": None}
@@ -111,6 +157,7 @@ FAKE_API = """
   const impl = {
     get_state: async () => state,
     save_config: async (values) => ({ ok: true, errors: {}, config: values, reconnecting: true }),
+    check_config: async () => ({}),
     list_mics: async () => ({ mics, error: '' }),
     mic_test: async () => ({ error: '' }),
     send_test: async () => ({ status: 'ok', detail: '' }),
@@ -175,14 +222,32 @@ window.TelegramWidget = {
 """
 
 CARD_ASK = {
-    "i": "c1", "s": "ask", "c": "whisper", "t": "Арторн", "x": "Где встречаемся?",
-    "o": "шепни арторну где встречаемся", "n": ["Арторн", "Лиана", "Морвен"], "a": 0, "e": "",
+    "i": "c1", "s": "ask", "c": "whisper", "t": SAMPLE["names"][0], "x": SAMPLE["whisper"][1],
+    "o": SAMPLE["whisper"][0], "n": SAMPLE["names"], "a": 0, "e": "",
 }
 PANEL = {
     "on": 1, "v": "0.3.0", "md": "addon", "since": T - 3723, "c": "group", "cf": 0,
-    "st": "off", "cs": "", "tr": 1, "n": "Арторн, Лиана",
+    "st": "off", "cs": "", "tr": 1, "n": ", ".join(SAMPLE["names"][:2]), "lg": LANG,
 }
 SETUP = {"on": 1, "v": "0.3.0", "md": "addon", "t": "ok", "e": "", "vc": "", "dl": ""}
+
+
+# widgets.py WIDGET_STRINGS: which strings each widget gets.
+WIDGET_STRINGS = {"card": ("card.", "chan."), "panel": ("panel.", "chan.", "mode."), "setup": ("setup.", "mode.")}
+
+
+def widget_html(name: str) -> str:
+    """Like widgets.load_html: the widget's HTML with its strings in LANG."""
+    html = (WIDGETS / f"{name}.html").read_text(encoding="utf-8")
+    table: dict[str, object] = {
+        key.removeprefix(f"{name}."): text
+        for key, text in strings(SERVER_LOCALES, LANG).items()
+        if key.startswith(WIDGET_STRINGS[name])
+    }
+    if name == "panel":
+        table["langs"] = [[code, title] for code, title in LANGUAGES.items()]
+    table_json = json.dumps(table, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    return html.replace("L=/*L*/{}", "L=" + table_json, 1)
 
 
 def widget(page: Page, name: str, data: dict) -> None:
@@ -190,7 +255,7 @@ def widget(page: Page, name: str, data: dict) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     stub = FAKE_WIDGET % json.dumps(json.dumps(data, ensure_ascii=False))
-    html = (WIDGETS / f"{name}.html").read_text(encoding="utf-8")
+    html = widget_html(name)
     page.set_content(f"<!doctype html><meta charset='utf-8'><script>{stub}</script>{html}")
     page.wait_for_timeout(200)
     if errors:

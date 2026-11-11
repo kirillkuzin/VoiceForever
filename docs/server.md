@@ -119,7 +119,7 @@ Any service with an OpenAI-compatible `/audio/transcriptions` works:
 | Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3-turbo` |
 | Your own server (speaches / faster-whisper) | `http://speaches:8000/v1` | `Systran/faster-whisper-large-v3` |
 
-`VF_STT_LANGUAGE` is the language players speak (`ru` by default). Set it to `en` for English, or leave it empty to let the model detect the language. `VF_STT_PROMPT` adds words that recognition often gets wrong, such as character names.
+`VF_STT_LANGUAGE` locks recognition to one language (a code such as `en` or `ru`); when it is empty, the model detects the spoken language. `VF_STT_PROMPT` is a hint with words that recognition often gets wrong, such as game slang or character names.
 
 ## Claude
 
