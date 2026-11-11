@@ -42,7 +42,7 @@ Telegram (голосовое) → сервер на VPS: распознаван�
 
 ### 2. Аддон
 
-Скопируй папку `addon/VoiceForever` в `Interface\AddOns` папки WoW Forever. Если игра пишет «устарел», включи «Загружать устаревшие модификации» или поставь в `VoiceForever.toc` номер из `/dump select(4, GetBuildInfo())`.
+Скопируй папку `addon/VoiceForever` в `Interface\AddOns` папки WoW Forever. Аддон собран под интерфейс 16001. Если после патча игра пишет «устарел», включи «Загружать устаревшие модификации» или поставь в `VoiceForever.toc` номер из `/dump select(4, GetBuildInfo())`.
 
 В игре: `/vf` покажет клавишу агента (по умолчанию `CTRL-SHIFT-F12`), `/vf test` отправит тест в группу.
 
