@@ -182,9 +182,9 @@ class AgentHub:
             log.warning("bad voice frame from user %s: %s", user_id, e)
             return
         if self.voice_handler is None:
-            result: dict[str, Any] = {"status": "unsupported", "detail": "сервер не принимает голос от агента"}
+            result: dict[str, Any] = {"status": "unsupported", "detail": "this server does not take voice from the agent"}
         elif len(upload.audio) > self.max_voice_bytes:
-            result = {"status": "too_long", "detail": "запись слишком длинная"}
+            result = {"status": "too_long", "detail": "the recording is too long"}
         else:
             lock = self._voice_locks.setdefault(user_id, asyncio.Lock())
             async with lock:
@@ -192,7 +192,7 @@ class AgentHub:
                     result = await self.voice_handler(user_id, upload)
                 except Exception:
                     log.exception("voice from user %s failed", user_id)
-                    result = {"status": "error", "detail": "ошибка на сервере"}
+                    result = {"status": "error", "detail": "server error"}
         with contextlib.suppress(ConnectionResetError):
             if not ws.closed:
                 await ws.send_json({"type": "voice_result", "id": upload.id, **result})

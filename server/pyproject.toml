@@ -24,7 +24,7 @@ build-backend = "setuptools.build_meta"
 packages = ["vf_server"]
 
 [tool.setuptools.package-data]
-vf_server = ["html/*.html"]
+vf_server = ["html/*.html", "locales/*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

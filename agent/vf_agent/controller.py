@@ -38,6 +38,7 @@ from .client import (
 )
 from .config import AgentConfig
 from .devices import Devices, Pad, Press
+from .i18n import t
 from .plan import GameState, Mode, SendCommand
 from .ptt import BY_NAME, Cmd, PttMachine, button_label
 
@@ -54,17 +55,15 @@ BIND_WAIT_GAME_S = 600  # the player starts the game and logs in
 BIND_WAIT_ADDON_S = 120  # the player presses the button in the game, the UI reloads
 ADDON_NOT_SET_UP = ("", -1.0)  # _addon_synced when the addon has no push-to-talk button yet
 ADDON_REREAD_S = 10.0  # until then, how often to look whether it got one (/vf ptt in the game)
-STATUS_TEXT: frozendict[str, str] = frozendict({
-    "skip": "Пропустил: не похоже на сообщение в чат",
-    "empty": "Не расслышал ни слова",
-    "stt_error": "Не получилось распознать речь",
-    "bad_audio": "Запись не дошла до сервера",
-    "too_long": "Запись слишком длинная",
-    "unsupported": "Сервер не принимает голос от агента",
-    "offline": "Нет связи с сервером",
-    "timeout": "Сервер не ответил вовремя",
-    "error": "Не отправлено, подробности в окне агента",
+# Recording statuses with a line of their own on the addon's badge in the game.
+BADGE_STATUSES = frozenset({
+    "skip", "empty", "stt_error", "bad_audio", "too_long", "unsupported", "offline", "timeout", "error",
 })
+
+
+def badge_text(status: str) -> str:
+    """What the addon's badge in the game says when a recording did not become a message."""
+    return t(f"badge.{status}" if status in BADGE_STATUSES else "badge.error")
 
 
 class Controller:
@@ -240,7 +239,7 @@ class Controller:
             log.warning("agent stopped: %s", e)
         except Exception:
             log.exception("agent crashed")
-            self._emit(Status(ConnState.DISCONNECTED, "внутренняя ошибка агента, подробности в журнале"))
+            self._emit(Status(ConnState.DISCONNECTED, t("net.crashed")))
 
     async def _disconnect(self) -> None:
         session, self._session = self._session, None
@@ -306,7 +305,7 @@ class Controller:
         if await asyncio.to_thread(devices.start):
             self.devices = devices
         else:
-            self._emit(PadState(False, error=devices.error or "SDL3 не запустился"))
+            self._emit(PadState(False, error=devices.error or t("pad.sdl_failed")))
 
     def _on_press(self, press: Press) -> None:
         if self._capture is not None and press.down and not self._capture.done():
@@ -336,7 +335,7 @@ class Controller:
                     self._ptt.abort()
                     if sounds:
                         devices.beep("error")
-                    self._emit(VoiceResult("", "error", detail=f"микрофон: {e}"))
+                    self._emit(VoiceResult("", "error", detail=t("mic.failed", error=e)))
                     return
                 if sounds:
                     devices.beep("start")
@@ -366,7 +365,7 @@ class Controller:
             self._emit(Recording(RecState.PROCESSING))
         try:
             if agent is None:
-                result = VoiceResult("", "offline", detail="нет связи с сервером")
+                result = VoiceResult("", "offline", detail=t("net.offline"))
                 self._emit(result)
             else:
                 result = await agent.send_voice(pcm)
@@ -379,8 +378,7 @@ class Controller:
                 self.devices.beep("error")
         # In the game the badge waits for the message; tell it when none will come.
         if agent is not None and result.status not in ("ok", "not_focused"):
-            text = STATUS_TEXT.get(result.status, result.detail or "Не отправлено")
-            await agent.type_control("status", result.status, text)
+            await agent.type_control("status", result.status, badge_text(result.status))
 
     async def _set_mic_test(self, on: bool, device: str) -> None:
         if self.devices is None or self._ptt.recording:
@@ -449,10 +447,10 @@ class Controller:
     async def _bind_check(self) -> None:
         config, agent = self.config, self._agent
         if config is None or agent is None:
-            self._emit(BindCheck("error", error="not_connected", detail="сначала сохрани настройки"))
+            self._emit(BindCheck("error", error="not_connected", detail=t("bind.d_save_first")))
             return
         if config.mode != Mode.ADDON:
-            self._emit(BindCheck("error", error="chat_mode", detail="проверка работает только с аддоном"))
+            self._emit(BindCheck("error", error="chat_mode", detail=t("bind.d_chat_mode")))
             return
         backend = agent.backend
         try:
@@ -464,14 +462,14 @@ class Controller:
                 while not self._game_focused():
                     await asyncio.sleep(0.3)
         except TimeoutError:
-            self._emit(BindCheck("error", error="timeout", detail="игра так и не появилась"))
+            self._emit(BindCheck("error", error="timeout", detail=t("bind.d_no_game")))
             return
 
         exe = await asyncio.to_thread(getattr(backend, "game_exe", lambda: None))
         nonce = secrets.token_hex(4)
         ack = await agent.type_control("ptt", "setup", f"{config.ptt_mode} {config.max_record_s:g} {nonce}")
         if ack["status"] != "ok":
-            self._emit(BindCheck("error", error="timeout", detail="окно игры не было активным"))
+            self._emit(BindCheck("error", error="timeout", detail=t("bind.d_not_focused")))
             return
         self._emit(BindCheck("sent"))
 
@@ -492,11 +490,11 @@ class Controller:
         except TimeoutError:
             pass
         if exe is None:
-            error, detail = "no_game_folder", "не нашёл папку игры, результат смотри в игре"
+            error, detail = "no_game_folder", t("bind.d_no_folder")
         elif not pressed:
-            error, detail = "addon_missing", "аддон не ответил: включён ли VoiceForever в списке аддонов?"
+            error, detail = "addon_missing", t("bind.d_addon_missing")
         else:
-            error, detail = "timeout", "аддон не сохранил результат, попробуй /reload в игре"
+            error, detail = "timeout", t("bind.d_no_result")
         self._emit(BindCheck("error", error=error, detail=detail))
 
     @staticmethod
@@ -509,8 +507,11 @@ class Controller:
                 "error",
                 key=key,
                 error="wrong_button",
-                detail=f"в игре нажата кнопка «{button_label(pressed.button, playstation)}», а запись "
-                f"настроена на «{button_label(config.ptt_button, playstation)}»",
+                detail=t(
+                    "bind.d_wrong_button",
+                    pressed=button_label(pressed.button, playstation),
+                    wanted=button_label(config.ptt_button, playstation),
+                ),
             )
         return BindCheck(
             "done",

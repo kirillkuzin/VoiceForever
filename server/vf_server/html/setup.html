@@ -27,28 +27,29 @@ button:active{filter:brightness(1.3)}
 </style>
 <div id="r"></div>
 <script>
-var W=window.TelegramWidget,R=document.querySelector('#r'),d={};
+var W=window.TelegramWidget,R=document.querySelector('#r'),L=/*L*/{},d={};
+function T(k,v){return String(L[k]||k).replace(/\{(\w+)\}/g,function(m,n){return v&&n in v?v[n]:m})}
 function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
 function load(){d=JSON.parse(W.chatData||'{}');draw()}
 function wait(t){return'<div class="r"><span class="dt"></span><span class="hn">'+t+'</span></div>'}
 function draw(){
 var t=d.t||'',ok=[1,d.on||t=='ok',t=='ok',!!d.vc],n=0,cur=0;
 ok.forEach(function(x,i){if(x)n++;else if(!cur)cur=i+1});
-var h='<div class="h">Проверка установки<i></i><span class="pl" style="color:'+(cur?'#f2ad42':'#5ed474')+'">'+(cur?n+' из 4':'готово')+'</span></div><div class="pg">'+ok.map(function(x){return'<span class="sg'+(x?' on':'')+'"></span>'}).join('')+'</div>';
-var S=[['Бот тебя узнал','','Твой Telegram ID есть в списке пользователей сервера.'],
-['Агент на ПК','Запусти VoiceForever Agent на игровом ПК. Пункт отметится сам.','Агент '+e(d.v)+' на связи, '+(d.md=='chat'?'обычный чат.':'режим аддона.')],
-['Тест в игре','Зайди в игру и нажми кнопку: в /say уйдёт строка «VoiceForever test».','Строка дошла до чата игры.'],
-['Первое голосовое','Отправь голосовое, например: «в гильдию, всем привет».','Ушло: '+e(d.vc)]];
+var h='<div class="h">'+T('title')+'<i></i><span class="pl" style="color:'+(cur?'#f2ad42':'#5ed474')+'">'+(cur?T('progress',{n:n}):T('done'))+'</span></div><div class="pg">'+ok.map(function(x){return'<span class="sg'+(x?' on':'')+'"></span>'}).join('')+'</div>';
+var S=[[T('s1'),'',T('s1_ok')],
+[T('s2'),T('s2_todo'),T('s2_ok',{version:e(d.v),mode:T('mode.'+(d.md=='chat'?'chat':'addon'))})],
+[T('s3'),T('s3_todo'),T('s3_ok')],
+[T('s4'),T('s4_todo'),T('s4_ok',{text:e(d.vc)})]];
 S.forEach(function(s,i){
 var me=cur==i+1,x='';
-if(me&&i==1)x=wait('Жду агента…')+(d.dl?'<button class="gh" style="align-self:flex-start" onclick="W.openLink(d.dl)">Скачать агент</button>':'');
+if(me&&i==1)x=wait(T('wait_agent'))+(d.dl?'<button class="gh" style="align-self:flex-start" onclick="W.openLink(d.dl)">'+T('download')+'</button>':'');
 if(me&&i==2){
-if(t=='busy')x='<div class="n"><span class="dt"></span>Жду окно WoW…</div>';
-else if(t=='ask')x='<b>Видишь «VoiceForever test» в чате игры?</b><div class="r"><button style="flex:1" onclick="go(\'ty\')">Вижу</button><button class="gh" style="flex:1" onclick="go(\'tn\')">Не появилось</button></div>';
-else x=(t=='help'?'<div class="n">Проверь, что аддон VoiceForever включён в списке модификаций, и нажми тест ещё раз.</div>':t=='fail'?'<div class="n">'+e(d.e)+'</div>':'')+'<button style="align-self:flex-start" onclick="go(\'t\')">'+(t?'Ещё раз':'Отправить тест')+'</button>'}
-if(me&&i==3)x=wait('Жду голосовое в этом чате…');
+if(t=='busy')x='<div class="n"><span class="dt"></span>'+T('wait_wow')+'</div>';
+else if(t=='ask')x='<b>'+T('see_test')+'</b><div class="r"><button style="flex:1" onclick="go(\'ty\')">'+T('yes')+'</button><button class="gh" style="flex:1" onclick="go(\'tn\')">'+T('no')+'</button></div>';
+else x=(t=='help'?'<div class="n">'+T('help')+'</div>':t=='fail'?'<div class="n">'+e(d.e)+'</div>':'')+'<button style="align-self:flex-start" onclick="go(\'t\')">'+T(t?'again':'send_test')+'</button>'}
+if(me&&i==3)x=wait(T('wait_voice'));
 h+='<div class="s"><span class="k'+(ok[i]?' ok':me?' on':'')+'">'+(ok[i]?'✓':i+1)+'</span><div><span class="tt"'+(ok[i]||me?'':' style="color:#b5a688"')+'>'+s[0]+'</span><span class="hn">'+(ok[i]?s[2]:s[1])+'</span>'+x+'</div></div>'});
-if(!cur)h+='<div class="n sa" style="border-color:rgba(94,212,116,.45);color:#d2f4d8">✓ Всё работает. Пульт закреплён вверху чата.</div>';
+if(!cur)h+='<div class="n sa" style="border-color:rgba(94,212,116,.45);color:#d2f4d8">'+T('all_done')+'</div>';
 R.innerHTML=h}
 function go(q){if(q=='t'){d.t='busy';draw()}W.request(q).then(function(){},function(){})}
 W.onEvent('chatDataChanged',load);load();if(W.ready)W.ready()

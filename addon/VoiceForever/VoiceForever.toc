@@ -1,8 +1,14 @@
 ## Interface: 16001
 ## Title: VoiceForever
 ## Notes: Sends messages from the VoiceForever voice agent to the right chat (party, raid, guild, whisper)
+## Notes-ruRU: Отправляет сообщения голосового агента VoiceForever в нужный чат (группа, рейд, гильдия, шёпот)
+## Notes-deDE: Sendet Nachrichten des Sprach-Agents VoiceForever in den richtigen Chat (Gruppe, Schlachtzug, Gilde, Flüstern)
+## Notes-esES: Envía los mensajes del agente de voz VoiceForever al chat correcto (grupo, banda, hermandad, susurro)
+## Notes-esMX: Envía los mensajes del agente de voz VoiceForever al chat correcto (grupo, banda, hermandad, susurro)
+## Notes-frFR: Envoie les messages de l'agent vocal VoiceForever dans le bon chat (groupe, raid, guilde, chuchotement)
 ## Author: VoiceForever
 ## Version: 0.2.0
 ## SavedVariables: VoiceForeverDB
 
+Locales.lua
 VoiceForever.lua

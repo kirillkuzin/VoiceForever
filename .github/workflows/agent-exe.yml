@@ -106,7 +106,7 @@ jobs:
           if (-not $ready) { throw "the agent window did not load" }
           # 4. SDL3.dll is inside the exe. A runner may have no sound card, so only a missing
           #    library fails the build.
-          if (Select-String -Path $log -Pattern "SDL3 не найден" -Quiet) { throw "SDL3.dll is not in the exe" }
+          if (Select-String -Path $log -Pattern "SDL3 not found" -Quiet) { throw "SDL3.dll is not in the exe" }
           if (-not (Select-String -Path $log -Pattern "SDL 3\." -Quiet)) { Write-Warning "SDL3 did not start on the runner" }
       - uses: actions/upload-artifact@v7
         with:

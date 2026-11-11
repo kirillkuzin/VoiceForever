@@ -1,5 +1,6 @@
 """Runs VoiceForever.lua in a real Lua interpreter (lupa) with a stubbed WoW API."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 lupa = pytest.importorskip("lupa.lua51")
 
 ADDON = Path(__file__).resolve().parents[1] / "VoiceForever" / "VoiceForever.lua"
+LOCALES = ADDON.with_name("Locales.lua")
 
 STUBS = r"""
 sent, printed, bindings, game_bindings = {}, {}, {}, {}
@@ -72,13 +74,21 @@ end
 """
 
 
-@pytest.fixture
-def lua():
+def load(locale="enUS"):
+    """The addon as the game loads it: the files of the TOC in order, sharing one namespace."""
     rt = lupa.LuaRuntime(unpack_returned_tuples=True)
     rt.execute(STUBS)
-    rt.execute(ADDON.read_text(encoding="utf-8"))
+    rt.execute(f'function GetLocale() return "{locale}" end')
+    ns = rt.table()
+    for path in (LOCALES, ADDON):
+        rt.execute(path.read_text(encoding="utf-8"), "VoiceForever", ns)
     rt.execute('fire("PLAYER_LOGIN")')
     return rt
+
+
+@pytest.fixture
+def lua():
+    return load()
 
 
 def last_sent(lua):
@@ -204,16 +214,16 @@ def test_setup_escape_cancels(lua):
 def test_toggle_badge_follows_a_recording(ptt):
     assert badge(ptt) is None
     pad(ptt, at=10)
-    assert "ЗАПИСЬ 0:00" in badge(ptt)
+    assert "RECORDING 0:00" in badge(ptt)
     tick(ptt, at=17.5)
-    assert "ЗАПИСЬ 0:07" in badge(ptt)
+    assert "RECORDING 0:07" in badge(ptt)
     pad(ptt, down=False)  # release does nothing in toggle mode
-    assert "ЗАПИСЬ" in badge(ptt)
+    assert "RECORDING" in badge(ptt)
     pad(ptt, at=18)
-    assert "Распознаю" in badge(ptt) and pending(ptt) == 1
+    assert "Recognising" in badge(ptt) and pending(ptt) == 1
     ptt.globals().agent_types("VF:guild::Всем привет")
     assert last_sent(ptt) == ("Всем привет", "GUILD", None)
-    assert "Гильдия" in badge(ptt) and pending(ptt) == 0
+    assert "Guild" in badge(ptt) and pending(ptt) == 0
     tick(ptt, at=30)
     assert badge(ptt) is None
 
@@ -223,7 +233,7 @@ def test_hold_mode(ptt):
     assert ptt.eval("VoiceForeverDB.ptt.mode") == "hold" and ptt.eval("VoiceForeverDB.ptt.max") == 20
     pad(ptt, at=1)
     pad(ptt, at=1.5)  # second press while holding: still recording
-    assert "ЗАПИСЬ" in badge(ptt)
+    assert "RECORDING" in badge(ptt)
     pad(ptt, down=False, at=3)
     assert pending(ptt) == 1
 
@@ -234,7 +244,7 @@ def test_short_press_and_time_limit(ptt):
     assert pending(ptt) == 0 and badge(ptt) is None
     pad(ptt, at=5)
     tick(ptt, at=35)  # 30 s limit: the agent sends now
-    assert pending(ptt) == 1 and "Распознаю" in badge(ptt)
+    assert pending(ptt) == 1 and "Recognising" in badge(ptt)
     tick(ptt, at=100)  # no answer for too long: stop waiting
     assert pending(ptt) == 0 and badge(ptt) is None
 
@@ -257,3 +267,56 @@ def test_telegram_messages_do_not_show_the_badge(ptt):
 def test_ptt_off(ptt):
     ptt.execute('SlashCmdList.VOICEFOREVER("ptt off")')
     assert ptt.eval('bound("PADRSTICK")') is None and ptt.eval("VoiceForeverDB.ptt") is None
+
+
+# ---------------------------------------------------------------- languages
+
+
+def printed(lua):
+    return list(lua.globals().printed.values())
+
+
+def test_every_language_has_every_string():
+    rt = lupa.LuaRuntime(unpack_returned_tuples=True)
+    rt.execute(STUBS)
+    rt.execute('function GetLocale() return "enUS" end')
+    ns = rt.table()
+    rt.execute(LOCALES.read_text(encoding="utf-8"), "VoiceForever", ns)
+    source = dict(ns.locales.enUS)
+    for code in ("ruRU", "deDE", "esES", "frFR", "esMX"):
+        other = dict(ns.locales[code])
+        assert other.keys() == source.keys(), code
+        for key, text in other.items():
+            assert text.strip(), (code, key)
+            assert re.findall(r"%[\d]*[sd]", text) == re.findall(r"%[\d]*[sd]", source[key]), (code, key)
+
+
+@pytest.mark.parametrize(
+    "locale, recording, test_line",
+    [("enUS", "RECORDING", "VoiceForever works"), ("enGB", "RECORDING", "VoiceForever works"),
+     ("ruRU", "ЗАПИСЬ", "VoiceForever работает"), ("deDE", "AUFNAHME", "VoiceForever funktioniert"),
+     ("esES", "GRABANDO", "VoiceForever funciona"), ("esMX", "GRABANDO", "VoiceForever funciona"),
+     ("frFR", "ENREGISTREMENT", "VoiceForever fonctionne"), ("ptBR", "RECORDING", "VoiceForever works")],
+)
+def test_texts_follow_the_game_language(locale, recording, test_line):
+    lua = load(locale)
+    lua.execute('state.group = true; SlashCmdList.VOICEFOREVER("test")')
+    assert last_sent(lua) == (test_line, "PARTY", None)
+    lua.execute('game_bindings.PADRSTICK = ""')
+    lua.globals().agent_types("VF:ptt:setup:toggle 30 x")
+    lua.execute('frames.VoiceForeverSetup.scripts.OnGamePadButtonDown(frames.VoiceForeverSetup, "PADRSTICK")')
+    pad(lua, at=1)
+    assert recording in badge(lua)
+
+
+def test_refusals_and_help_in_the_game_language():
+    lua = load("deDE")
+    lua.globals().agent_types("VF:group::Hallo")
+    assert printed(lua)[0].endswith("nicht gesendet (du bist in keiner Gruppe): Hallo")
+    lua.execute('SlashCmdList.VOICEFOREVER("")')
+    assert "Gruppe gerade: keine Gruppe" in printed(lua)[-2]
+    assert printed(lua)[-1].startswith("|cff66ccff[VoiceForever]|r /vf key CTRL-SHIFT-F12 ändert die Taste")
+    lua = load("ruRU")
+    lua.execute('state.raid = true; state.group = true; SlashCmdList.VOICEFOREVER("")')
+    assert "группа сейчас: Рейд" in printed(lua)[-2]
+    assert lua.eval("frames.VoiceForeverSetup.label.text").startswith("VoiceForever: нажми")

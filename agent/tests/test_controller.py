@@ -13,6 +13,7 @@ from vf_server.chat import ChatMessage  # noqa: E402
 from vf_server.hub import AgentHub  # noqa: E402
 
 from vf_agent import controller as controller_module  # noqa: E402
+from vf_agent import i18n  # noqa: E402
 from vf_agent.client import ConnState, Delivery, Game, PadState, RecState, Recording, Status  # noqa: E402
 from vf_agent.config import AgentConfig, defaults  # noqa: E402
 from vf_agent.controller import Controller  # noqa: E402
@@ -195,6 +196,13 @@ class FakeHost:
         self.applied.append(config)
         return True
 
+    def set_language(self, setting):
+        i18n.set_language(setting)
+        self.draft["language"] = setting
+
+    def file_errors(self):
+        return {k: v for k, v in self.errors.items() if k == "file"}
+
 
 def test_get_state_first_run(tmp_path):
     state = Api(FakeHost(tmp_path, errors={"token": "x"})).get_state()
@@ -225,6 +233,25 @@ def test_save_config_writes_and_applies(tmp_path):
     assert AgentConfig.load(host.config_path) == host.applied[0]
     Api(host).connect()
     assert host.controller.calls == ["connect"]
+
+
+def test_get_state_carries_the_language(tmp_path):
+    state = Api(FakeHost(tmp_path)).get_state()
+    assert state["language"] == "" and state["lang"] == "en"
+    assert [l["code"] for l in state["languages"]] == ["en", "ru", "de", "es", "fr"]
+    assert state["strings"]["tabs.settings"] == "Settings"
+    assert state["pad_buttons"][0] == {"name": "rightstick", "xbox": "Right stick (RS)", "playstation": "Right stick (R3)"}
+
+
+def test_set_language_switches_strings_and_buttons(tmp_path):
+    host = FakeHost(tmp_path)
+    api = Api(host)
+    result = api.set_language("fr")
+    assert result["language"] == "fr" and result["lang"] == "fr" and host.draft["language"] == "fr"
+    assert result["strings"]["tabs.settings"] == "Réglages"
+    assert result["pad_buttons"][0]["xbox"] == "Stick droit (RS)"
+    assert api.check_config(defaults())["server_url"].startswith("Indique l'adresse")
+    assert api.set_language("klingon")["language"] == ""  # unknown: back to the system language
 
 
 def test_send_test_needs_settings(tmp_path):

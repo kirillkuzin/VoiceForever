@@ -57,7 +57,8 @@ class RouteResult:
     decision: Decision
     message: ChatMessage
     source: str  # "llm" or "rules"
-    note: str = ""
+    note: str = ""  # why the rules were used: a key under note.* in the locales, e.g. "llm_down"
+    note_code: int = 0  # the LLM's HTTP status for note "llm_error"
 
 
 # --------------------------------------------------------------------------- rules
@@ -195,23 +196,23 @@ class LLMRouter:
         return json.dumps(payload, ensure_ascii=False)
 
     async def route(self, transcript: str, ctx: RouteContext) -> RouteResult:
-        def fallback(note: str) -> RouteResult:
-            return replace(rule_route(transcript, ctx), note=note)
+        def fallback(note: str, code: int = 0) -> RouteResult:
+            return replace(rule_route(transcript, ctx), note=note, note_code=code)
 
         try:
             data = await self._ask(self.build_input(transcript, ctx))
         except anthropic.RateLimitError:
             log.warning("LLM rate limited, using rules")
-            return fallback("LLM: лимит запросов")
+            return fallback("llm_limit")
         except anthropic.APIStatusError as e:
             log.error("LLM error %s: %s", e.status_code, e.message)
-            return fallback(f"LLM ошибка {e.status_code}")
+            return fallback("llm_error", e.status_code)
         except anthropic.APIConnectionError as e:  # includes APITimeoutError
             log.warning("LLM unreachable, using rules: %s", e)
-            return fallback("LLM недоступна")
+            return fallback("llm_down")
         except RouterOutputError as e:
             log.warning("LLM output unusable (%s), using rules", e)
-            return fallback("LLM не ответила по формату")
+            return fallback("llm_format")
 
         msg = validate(data["channel"], data["target"], data["text"], ctx.default_channel)
         if data["action"] == Decision.SKIP or not msg.text:

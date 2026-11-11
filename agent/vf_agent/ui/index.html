@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>VoiceForever</title>
@@ -13,102 +13,96 @@
     <span class="brand pywebview-drag-region">VoiceForever</span>
     <span class="spacer pywebview-drag-region"></span>
     <span class="ver pywebview-drag-region" id="version"></span>
-    <button class="wbtn" type="button" id="btn-minimize" aria-label="Свернуть"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-    <button class="wbtn x" type="button" id="btn-close" aria-label="Закрыть"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <span class="langpick" id="lang-box"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.9 8h12.2M8 1.7c-2.2 2.2-2.2 10.4 0 12.6M8 1.7c2.2 2.2 2.2 10.4 0 12.6" fill="none" stroke="currentColor" stroke-width="1.1"/></svg><span id="lang-code"></span><select id="lang-pick" data-i18n-attr="aria-label:app.language;title:app.language"></select></span>
+    <button class="wbtn" type="button" id="btn-minimize" data-i18n-attr="aria-label:app.minimize"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+    <button class="wbtn x" type="button" id="btn-close" data-i18n-attr="aria-label:app.close"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   </header>
 
   <!-- ============================================================ first run -->
   <main class="view" id="view-wizard" hidden>
     <div class="field">
-      <h1 class="title">Настройка агента</h1>
-      <p class="muted">Четыре шага, и сказанное с геймпада появится в чате игры.</p>
+      <h1 class="title" data-i18n="wizard.title"></h1>
     </div>
-    <ol class="steps" aria-label="Шаги настройки">
-      <li data-step="1"><span class="sn">1</span><span class="sl">Сервер</span></li>
-      <li data-step="2"><span class="sn">2</span><span class="sl">Ввод</span></li>
-      <li data-step="3"><span class="sn">3</span><span class="sl">Голос</span></li>
-      <li data-step="4"><span class="sn">4</span><span class="sl">Проверка</span></li>
+    <ol class="steps" data-i18n-attr="aria-label:wizard.steps">
+      <li data-step="1"><span class="sn">1</span><span class="sl" data-i18n="section.server"></span></li>
+      <li data-step="2"><span class="sn">2</span><span class="sl" data-i18n="wizard.step_mode"></span></li>
+      <li data-step="3"><span class="sn">3</span><span class="sl" data-i18n="section.voice"></span></li>
+      <li data-step="4"><span class="sn">4</span><span class="sl" data-i18n="wizard.step_check"></span></li>
     </ol>
 
-    <section class="panel grow" data-page="1" aria-label="Сервер">
-      <h2 class="ph">Сервер</h2>
+    <section class="panel grow" data-page="1" data-i18n-attr="aria-label:section.server">
+      <h2 class="ph" data-i18n="section.server"></h2>
       <div class="field">
-        <label class="lbl" for="w-url">Адрес сервера</label>
+        <div class="lrow"><label class="lbl" for="w-url" data-i18n="field.server_url"></label><button class="info" type="button" data-i18n-tip="tip.server_url"></button></div>
         <input class="inp" id="w-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off" placeholder="wss://vf.example.com/ws">
         <span class="err" data-error-for="server_url"></span>
-        <span class="hint">Начинается с wss://. Обычный ws:// подходит только для своей домашней сети.</span>
       </div>
       <div class="field">
-        <label class="lbl" for="w-token">Токен агента</label>
+        <div class="lrow"><label class="lbl" for="w-token" data-i18n="field.token"></label><button class="info" type="button" data-i18n-tip="tip.token"></button></div>
         <div class="row">
           <input class="inp grow" id="w-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
-          <button class="btn ghost" type="button" data-reveal="w-token" style="min-width: 108px; min-height: 42px">Показать</button>
+          <button class="btn ghost" type="button" data-reveal="w-token" style="min-width: 108px; min-height: 42px"></button>
         </div>
         <span class="err" data-error-for="token"></span>
-        <span class="hint">Часть после двоеточия у твоего Telegram ID в VF_USERS на сервере.</span>
       </div>
       <div class="err" data-error-for="file"></div>
       <div class="note" id="w-check" hidden></div>
     </section>
 
-    <section class="panel grow" data-page="2" aria-label="Ввод в игру" hidden>
-      <h2 class="ph">Ввод в игру</h2>
-      <div class="field" aria-label="Режим ввода">
+    <section class="panel grow" data-page="2" data-i18n-attr="aria-label:field.mode" hidden>
+      <h2 class="ph"><span data-i18n="field.mode"></span><button class="info" type="button" data-i18n-tip="tip.mode"></button></h2>
+      <div class="field" data-i18n-attr="aria-label:field.mode">
         <button class="choice" type="button" data-mode="addon">
-          <span class="ct"><span class="dot"></span>С аддоном VoiceForever<span class="badge">советуем</span></span>
-          <span class="hint">Окно чата не открывается. Аддон сам выбирает группу, рейд или подземелье и отвечает на последний шёпот.</span>
+          <span class="ct"><span class="dot"></span><span data-i18n="wizard.mode_addon"></span><span class="badge" data-i18n="wizard.recommended"></span></span>
         </button>
         <button class="choice" type="button" data-mode="chat">
-          <span class="ct"><span class="dot"></span>Обычный чат</span>
-          <span class="hint">Без аддона. Агент открывает чат клавишей Enter и печатает /p, /g, /w.</span>
+          <span class="ct"><span class="dot"></span><span data-i18n="mode.chat"></span></span>
         </button>
       </div>
       <div class="field" data-addon-only>
-        <span class="lbl">Клавиша аддона</span>
-        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture>Изменить</button></div>
+        <div class="lrow"><span class="lbl" data-i18n="field.addon_hotkey"></span><button class="info" type="button" data-i18n-tip="tip.addon_hotkey"></button></div>
+        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture data-i18n="common.change"></button></div>
         <span class="err" data-error-for="addon_hotkey"></span>
-        <span class="hint" data-hotkey-hint></span>
+        <span class="hint warn" data-hotkey-hint></span>
       </div>
     </section>
 
-    <section class="panel grow scrollp" data-page="3" aria-label="Голос" hidden>
-      <h2 class="ph">Голос</h2>
+    <section class="panel grow scrollp" data-page="3" data-i18n-attr="aria-label:section.voice" hidden>
+      <h2 class="ph" data-i18n="section.voice"></h2>
       <div class="field">
-        <label class="lbl" for="w-mic">Микрофон</label>
+        <div class="lrow"><label class="lbl" for="w-mic" data-i18n="field.mic"></label><button class="info" type="button" data-i18n-tip="tip.mic"></button></div>
         <div class="selwrap">
           <select class="inp sel-inp" id="w-mic" data-mic></select>
           <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
         </div>
         <div class="row">
-          <div class="lvl" data-level role="meter" aria-label="Громкость микрофона" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
-          <button class="btn ghost sm" type="button" data-mic-test style="flex: none">Проверить</button>
+          <div class="lvl" data-level role="meter" data-i18n-attr="aria-label:mic.level" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
+          <button class="btn ghost sm" type="button" data-mic-test style="flex: none"></button>
         </div>
-        <span class="hint" data-mic-hint></span>
+        <span class="hint bad" data-mic-hint></span>
       </div>
       <div class="field">
-        <span class="lbl">Кнопка записи</span>
+        <div class="lrow"><span class="lbl" data-i18n="field.ptt_button"></span><button class="info" type="button" data-ptt-tip></button></div>
         <div class="padcard" data-padcard>
           <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
           <div class="field grow" style="gap: 2px" data-pad-info></div>
-          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none">Назначить</button>
+          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none" data-i18n="pad.assign"></button>
         </div>
         <span class="err" data-error-for="ptt_button"></span>
       </div>
       <div class="field">
-        <span class="lbl" id="w-pttmode-l">Как записывать</span>
+        <div class="lrow"><span class="lbl" id="w-pttmode-l" data-i18n="field.ptt_mode"></span><button class="info" type="button" data-i18n-tip="tip.ptt_mode"></button></div>
         <div class="seg" role="group" aria-labelledby="w-pttmode-l">
-          <button class="segb" type="button" data-pttmode="toggle">Нажал и нажал</button>
-          <button class="segb" type="button" data-pttmode="hold">Удерживать</button>
+          <button class="segb" type="button" data-pttmode="toggle" data-i18n="ptt.toggle"></button>
+          <button class="segb" type="button" data-pttmode="hold" data-i18n="ptt.hold"></button>
         </div>
-        <span class="hint" data-pttmode-hint></span>
       </div>
-      <div class="note warn top" data-ptt-warn hidden></div>
     </section>
 
-    <section class="panel grow scrollp" data-page="4" aria-label="Проверка в игре" hidden>
-      <h2 class="ph">Проверка в игре</h2>
-      <p id="w-bind-intro"></p>
-      <ol class="chks" data-bind-rows aria-label="Ход проверки в игре"></ol>
+    <section class="panel grow scrollp" data-page="4" data-i18n-attr="aria-label:bind.title" hidden>
+      <h2 class="ph"><span data-i18n="bind.title"></span><button class="info" type="button" data-bind-tip></button></h2>
+      <p class="hint" id="w-bind-intro"></p>
+      <ol class="chks" data-bind-rows data-i18n-attr="aria-label:bind.progress"></ol>
       <div class="note" data-bind-result hidden></div>
       <div class="row" data-bind-actions></div>
       <div class="sep"></div>
@@ -118,22 +112,22 @@
       </div>
       <div class="note" id="w-voice-result" hidden></div>
       <div class="sep"></div>
-      <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span>Подключаться сразу при запуске агента</span></label>
-      <label class="sw" for="w-boot"><input id="w-boot" type="checkbox"><span class="track"></span><span>Запускать вместе с Windows</span></label>
+      <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span data-i18n="settings.connect_on_start"></span></label>
+      <label class="sw" for="w-boot"><input id="w-boot" type="checkbox"><span class="track"></span><span data-i18n="field.autostart"></span></label>
     </section>
 
     <div class="row">
-      <button class="btn ghost" type="button" id="w-back" hidden>Назад</button>
+      <button class="btn ghost" type="button" id="w-back" hidden data-i18n="common.back"></button>
       <span class="grow"></span>
-      <button class="btn ghost" type="button" id="w-skip" hidden>Продолжить без проверки</button>
-      <button class="link" type="button" id="w-later" hidden style="align-self: center; margin-right: 8px">Проверю потом</button>
-      <button class="btn wide" type="button" id="w-next">Подключиться</button>
+      <button class="btn ghost" type="button" id="w-skip" hidden data-i18n="common.skip"></button>
+      <button class="link" type="button" id="w-later" hidden style="align-self: center; margin-right: 8px" data-i18n="common.skip"></button>
+      <button class="btn wide" type="button" id="w-next"></button>
     </div>
   </main>
 
   <!-- ============================================================ status -->
   <main class="view" id="view-status" hidden>
-    <section class="panel" aria-label="Соединение с сервером">
+    <section class="panel" data-i18n-attr="aria-label:status.connection">
       <div class="row" style="gap: 18px">
         <span class="orb" id="st-orb" aria-hidden="true"></span>
         <div class="field grow" style="gap: 2px">
@@ -145,13 +139,10 @@
       <div class="row wrap" id="st-actions"></div>
     </section>
 
-    <section class="panel" aria-label="Игра и голос" style="gap: 10px; padding: 12px 16px">
+    <section class="panel" data-i18n-attr="aria-label:status.game_voice" style="gap: 10px; padding: 12px 16px">
       <div class="row" style="gap: 14px">
         <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" style="flex: none"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 12l5 10 5-10" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div class="field grow" style="gap: 1px">
-          <span style="font-weight: 700">World of Warcraft</span>
-          <span class="hint" id="game-hint"></span>
-        </div>
+        <div class="lrow grow" style="align-items: center"><span style="font-weight: 700">World of Warcraft</span><button class="info" type="button" data-i18n-tip="tip.game"></button></div>
         <span class="pill" id="game-pill"></span>
       </div>
       <div id="st-voice" hidden>
@@ -168,14 +159,15 @@
       </div>
     </section>
 
-    <section class="panel grow" aria-label="Последние сообщения" style="min-height: 0; gap: 8px">
+    <section class="panel grow" data-i18n-attr="aria-label:msgs.title" style="min-height: 0; gap: 8px">
       <div class="row" style="gap: 12px">
-        <h2 class="ph grow">Последние сообщения</h2>
-        <button class="link" type="button" id="btn-log">Открыть журнал</button>
+        <h2 class="ph grow" data-i18n="msgs.title"></h2>
+        <button class="link" type="button" id="btn-log" data-i18n="status.open_log"></button>
       </div>
       <ul class="msgs" id="msgs"></ul>
       <div class="row" style="gap: 12px; padding-top: 4px">
-        <button class="btn ghost" type="button" id="st-test" style="flex: none">Тест в /say</button>
+        <button class="btn ghost" type="button" id="st-test" style="flex: none" data-i18n="status.test"></button>
+        <button class="info" type="button" data-i18n-tip="tip.test"></button>
         <span class="hint" id="st-test-hint"></span>
       </div>
     </section>
@@ -185,163 +177,164 @@
   <main class="view scroll" id="view-settings" hidden>
     <div class="note bad" id="s-file-error" hidden></div>
 
-    <section class="panel" aria-label="Сервер">
-      <h2 class="ph">Сервер</h2>
+    <section class="panel" data-i18n-attr="aria-label:section.server">
+      <h2 class="ph" data-i18n="section.server"></h2>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-url">Адрес сервера</label><code class="tk">server_url</code></div>
-        <input class="inp" id="s-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off">
+        <div class="lrow"><label class="lbl" for="s-url" data-i18n="field.server_url"></label><button class="info" type="button" data-i18n-tip="tip.server_url"></button></div>
+        <input class="inp" id="s-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off" placeholder="wss://vf.example.com/ws">
         <span class="err" data-error-for="server_url"></span>
-        <span class="hint">wss:// через TLS. ws:// только в своей сети.</span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-token">Токен агента</label><code class="tk">token</code></div>
+        <div class="lrow"><label class="lbl" for="s-token" data-i18n="field.token"></label><button class="info" type="button" data-i18n-tip="tip.token"></button></div>
         <div class="row">
           <input class="inp grow" id="s-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
-          <button class="btn ghost" type="button" data-reveal="s-token" style="min-width: 108px; min-height: 42px">Показать</button>
+          <button class="btn ghost" type="button" data-reveal="s-token" style="min-width: 108px; min-height: 42px"></button>
         </div>
         <span class="err" data-error-for="token"></span>
-        <span class="hint">Часть после двоеточия у твоего Telegram ID в VF_USERS на сервере.</span>
       </div>
     </section>
 
-    <section class="panel" aria-label="Ввод в игру">
-      <h2 class="ph">Ввод в игру</h2>
+    <section class="panel" data-i18n-attr="aria-label:section.input">
+      <h2 class="ph" data-i18n="section.input"></h2>
       <div class="field">
-        <div class="lrow"><span class="lbl" id="s-mode-l">Режим</span><code class="tk">mode</code></div>
+        <div class="lrow"><span class="lbl" id="s-mode-l" data-i18n="field.mode"></span><button class="info" type="button" data-i18n-tip="tip.mode"></button></div>
         <div class="seg" role="group" aria-labelledby="s-mode-l">
-          <button class="segb" type="button" data-mode="addon">Аддон</button>
-          <button class="segb" type="button" data-mode="chat">Обычный чат</button>
+          <button class="segb" type="button" data-mode="addon" data-i18n="settings.mode_addon"></button>
+          <button class="segb" type="button" data-mode="chat" data-i18n="mode.chat"></button>
         </div>
         <span class="err" data-error-for="mode"></span>
-        <span class="hint" id="s-mode-hint"></span>
       </div>
       <div class="field" data-addon-only>
-        <div class="lrow"><span class="lbl">Клавиша аддона</span><code class="tk">addon_hotkey</code></div>
-        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture>Изменить</button></div>
+        <div class="lrow"><span class="lbl" data-i18n="field.addon_hotkey"></span><button class="info" type="button" data-i18n-tip="tip.addon_hotkey"></button></div>
+        <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture data-i18n="common.change"></button></div>
         <span class="err" data-error-for="addon_hotkey"></span>
-        <span class="hint" data-hotkey-hint></span>
+        <span class="hint warn" data-hotkey-hint></span>
       </div>
     </section>
 
-    <section class="panel" aria-label="Голос">
-      <h2 class="ph">Голос</h2>
-      <label class="sw" for="s-ptt"><input id="s-ptt" data-check="ptt_enabled" type="checkbox"><span class="track"></span><span class="grow">Запись голоса кнопкой геймпада</span><code class="tk">ptt_enabled</code></label>
+    <section class="panel" data-i18n-attr="aria-label:section.voice">
+      <h2 class="ph" data-i18n="section.voice"></h2>
+      <label class="sw" for="s-ptt"><input id="s-ptt" data-check="ptt_enabled" type="checkbox"><span class="track"></span><span data-i18n="settings.ptt_enabled"></span></label>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-mic">Микрофон</label><code class="tk">mic_device</code></div>
+        <div class="lrow"><label class="lbl" for="s-mic" data-i18n="field.mic"></label><button class="info" type="button" data-i18n-tip="tip.mic"></button></div>
         <div class="selwrap">
           <select class="inp sel-inp" id="s-mic" data-mic></select>
           <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
         </div>
         <div class="row">
-          <div class="lvl" data-level role="meter" aria-label="Громкость микрофона" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
-          <button class="btn ghost sm" type="button" data-mic-test style="flex: none">Проверить</button>
+          <div class="lvl" data-level role="meter" data-i18n-attr="aria-label:mic.level" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
+          <button class="btn ghost sm" type="button" data-mic-test style="flex: none"></button>
         </div>
-        <span class="hint" data-mic-hint></span>
+        <span class="hint bad" data-mic-hint></span>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl">Кнопка записи</span><code class="tk">ptt_button</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="field.ptt_button"></span><button class="info" type="button" data-ptt-tip></button></div>
         <div class="padcard" data-padcard>
           <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
           <div class="field grow" style="gap: 2px" data-pad-info></div>
-          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none">Назначить</button>
+          <button class="btn ghost sm" type="button" data-pad-capture style="flex: none" data-i18n="pad.assign"></button>
         </div>
         <span class="err" data-error-for="ptt_button"></span>
         <div class="row" style="gap: 10px; align-items: baseline">
           <span class="hint grow" id="s-bind-line"></span>
-          <button class="link" type="button" id="s-bind-open" style="flex: none">Проверить в игре</button>
+          <button class="link" type="button" id="s-bind-open" style="flex: none" data-i18n="bind.open"></button>
+          <button class="info" type="button" data-bind-tip style="align-self: center"></button>
         </div>
         <div class="field" id="s-bind-box" hidden>
-          <ol class="chks" data-bind-rows aria-label="Ход проверки в игре"></ol>
+          <ol class="chks" data-bind-rows data-i18n-attr="aria-label:bind.progress"></ol>
           <div class="note" data-bind-result hidden></div>
           <div class="row" data-bind-actions></div>
         </div>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl" id="s-pttmode-l">Как записывать</span><code class="tk">ptt_mode</code></div>
+        <div class="lrow"><span class="lbl" id="s-pttmode-l" data-i18n="field.ptt_mode"></span><button class="info" type="button" data-i18n-tip="tip.ptt_mode"></button></div>
         <div class="seg" role="group" aria-labelledby="s-pttmode-l">
-          <button class="segb" type="button" data-pttmode="toggle">Нажал и нажал</button>
-          <button class="segb" type="button" data-pttmode="hold">Удерживать</button>
+          <button class="segb" type="button" data-pttmode="toggle" data-i18n="ptt.toggle"></button>
+          <button class="segb" type="button" data-pttmode="hold" data-i18n="ptt.hold"></button>
         </div>
-        <span class="hint" data-pttmode-hint></span>
       </div>
-      <div class="note warn top" data-ptt-warn hidden></div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-max">Самая длинная запись</label><code class="tk">max_record_s</code></div>
-        <div class="row" style="gap: 12px"><input id="s-max" data-range="max_record_s" data-unit="с" type="range" min="5" max="60" step="5"><output class="val" for="s-max"></output></div>
+        <div class="lrow"><label class="lbl" for="s-max" data-i18n="settings.max_record"></label><button class="info" type="button" data-i18n-tip="tip.max_record"></button></div>
+        <div class="row" style="gap: 12px"><input id="s-max" data-range="max_record_s" data-unit="s" type="range" min="5" max="60" step="5"><output class="val" for="s-max"></output></div>
         <span class="err" data-error-for="max_record_s"></span>
-        <span class="hint">Дольше этого запись остановится сама и уйдёт в чат.</span>
       </div>
-      <label class="sw" for="s-snd"><input id="s-snd" data-check="ptt_sounds" type="checkbox"><span class="track"></span><span class="grow">Звук в начале и в конце записи</span><code class="tk">ptt_sounds</code></label>
+      <label class="sw" for="s-snd"><input id="s-snd" data-check="ptt_sounds" type="checkbox"><span class="track"></span><span data-i18n="settings.ptt_sounds"></span><button class="info" type="button" data-i18n-tip="tip.ptt_sounds"></button></label>
     </section>
 
-    <section class="panel" aria-label="Окно игры">
-      <h2 class="ph">Окно игры</h2>
-      <p class="hint">Агент печатает только в активное окно игры. Достаточно совпадения по названию окна или по имени процесса.</p>
+    <section class="panel" data-i18n-attr="aria-label:settings.game_window">
+      <h2 class="ph"><span data-i18n="settings.game_window"></span><button class="info" type="button" data-i18n-tip="tip.game_window"></button></h2>
       <div class="field">
-        <div class="lrow"><span class="lbl">Названия окна</span><code class="tk">window_titles</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="settings.window_titles"></span></div>
         <div class="chips" data-chips="window_titles"></div>
         <span class="err" data-error-for="window_titles"></span>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl">Процессы игры</span><code class="tk">process_names</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="settings.process_names"></span></div>
         <div class="chips" data-chips="process_names"></div>
         <span class="err" data-error-for="process_names"></span>
       </div>
       <div class="field" style="gap: 8px">
-        <button class="btn ghost" type="button" id="s-detect" style="align-self: flex-start">Определить по окну игры</button>
+        <div class="row"><button class="btn ghost" type="button" id="s-detect" data-i18n="detect.button"></button><button class="info" type="button" data-i18n-tip="tip.detect"></button></div>
         <div class="note" id="s-detect-note" hidden></div>
-        <span class="hint" id="s-detect-hint">Нажми, затем за 5 секунд переключись в игру: агент сам добавит её окно и процесс.</span>
       </div>
     </section>
 
-    <section class="panel" aria-label="Тайминги ввода">
-      <h2 class="ph">Тайминги ввода</h2>
+    <section class="panel" data-i18n-attr="aria-label:settings.timings">
+      <h2 class="ph" data-i18n="settings.timings"></h2>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-focus">Ждать окно игры</label><code class="tk">focus_wait_s</code></div>
-        <div class="row" style="gap: 12px"><input id="s-focus" data-range="focus_wait_s" data-unit="с" type="range" min="1" max="60" step="1"><output class="val" for="s-focus"></output></div>
+        <div class="lrow"><label class="lbl" for="s-focus" data-i18n="settings.focus_wait"></label><button class="info" type="button" data-i18n-tip="tip.focus_wait"></button></div>
+        <div class="row" style="gap: 12px"><input id="s-focus" data-range="focus_wait_s" data-unit="s" type="range" min="1" max="60" step="1"><output class="val" for="s-focus"></output></div>
         <span class="err" data-error-for="focus_wait_s"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-open">Пауза после открытия поля ввода</label><code class="tk">open_delay_ms</code></div>
-        <div class="row" style="gap: 12px"><input id="s-open" data-range="open_delay_ms" data-unit="мс" type="range" min="0" max="500" step="10"><output class="val" for="s-open"></output></div>
+        <div class="lrow"><label class="lbl" for="s-open" data-i18n="settings.open_delay"></label><button class="info" type="button" data-i18n-tip="tip.open_delay"></button></div>
+        <div class="row" style="gap: 12px"><input id="s-open" data-range="open_delay_ms" data-unit="ms" type="range" min="0" max="500" step="10"><output class="val" for="s-open"></output></div>
         <span class="err" data-error-for="open_delay_ms"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-part">Пауза между частями сообщения</label><code class="tk">part_delay_ms</code></div>
-        <div class="row" style="gap: 12px"><input id="s-part" data-range="part_delay_ms" data-unit="мс" type="range" min="100" max="2000" step="50"><output class="val" for="s-part"></output></div>
+        <div class="lrow"><label class="lbl" for="s-part" data-i18n="settings.part_delay"></label><button class="info" type="button" data-i18n-tip="tip.part_delay"></button></div>
+        <div class="row" style="gap: 12px"><input id="s-part" data-range="part_delay_ms" data-unit="ms" type="range" min="100" max="2000" step="50"><output class="val" for="s-part"></output></div>
         <span class="err" data-error-for="part_delay_ms"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-key">Пауза между нажатиями клавиш</label><code class="tk">key_delay_ms</code></div>
-        <div class="row" style="gap: 12px"><input id="s-key" data-range="key_delay_ms" data-unit="мс" type="range" min="0" max="100" step="5"><output class="val" for="s-key"></output></div>
+        <div class="lrow"><label class="lbl" for="s-key" data-i18n="settings.key_delay"></label><button class="info" type="button" data-i18n-tip="tip.key_delay"></button></div>
+        <div class="row" style="gap: 12px"><input id="s-key" data-range="key_delay_ms" data-unit="ms" type="range" min="0" max="100" step="5"><output class="val" for="s-key"></output></div>
         <span class="err" data-error-for="key_delay_ms"></span>
       </div>
-      <button class="link" type="button" id="s-reset-timings">Вернуть значения по умолчанию</button>
+      <button class="link" type="button" id="s-reset-timings" data-i18n="settings.reset_timings"></button>
     </section>
 
-    <section class="panel" aria-label="Приложение">
-      <h2 class="ph">Приложение</h2>
-      <label class="sw" for="s-auto"><input id="s-auto" data-check="connect_on_start" type="checkbox"><span class="track"></span><span class="grow">Подключаться при запуске</span><code class="tk">connect_on_start</code></label>
-      <label class="sw" for="s-tray"><input id="s-tray" data-check="close_to_tray" type="checkbox"><span class="track"></span><span class="grow">Крестик сворачивает в трей</span><code class="tk">close_to_tray</code></label>
-      <label class="sw" for="s-boot"><input id="s-boot" data-check="autostart" type="checkbox"><span class="track"></span><span class="grow">Запускать вместе с Windows</span><code class="tk">autostart</code></label>
+    <section class="panel" data-i18n-attr="aria-label:settings.app">
+      <h2 class="ph" data-i18n="settings.app"></h2>
+      <label class="sw" for="s-auto"><input id="s-auto" data-check="connect_on_start" type="checkbox"><span class="track"></span><span data-i18n="settings.connect_on_start"></span></label>
+      <label class="sw" for="s-tray"><input id="s-tray" data-check="close_to_tray" type="checkbox"><span class="track"></span><span data-i18n="settings.close_to_tray"></span></label>
+      <label class="sw" for="s-boot"><input id="s-boot" data-check="autostart" type="checkbox"><span class="track"></span><span data-i18n="field.autostart"></span></label>
+      <div class="field">
+        <div class="lrow"><label class="lbl" for="s-lang" data-i18n="settings.language"></label><button class="info" type="button" data-i18n-tip="tip.language"></button></div>
+        <div class="selwrap">
+          <select class="inp sel-inp" id="s-lang"></select>
+          <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+      </div>
       <div class="field" style="padding-top: 4px">
-        <span class="lbl">Файл настроек</span>
-        <div class="row"><code class="path" id="s-path"></code><button class="btn ghost sm" type="button" id="s-open-folder">Открыть папку</button></div>
+        <span class="lbl" data-i18n="settings.config_file"></span>
+        <div class="row"><code class="path" id="s-path"></code><button class="btn ghost sm" type="button" id="s-open-folder" data-i18n="settings.open_folder"></button></div>
       </div>
     </section>
 
     <div class="savebar">
       <span class="hint grow" id="s-dirty" role="status"></span>
-      <button class="btn ghost" type="button" id="s-cancel">Отменить</button>
-      <button class="btn" type="button" id="s-save">Сохранить</button>
+      <button class="btn ghost" type="button" id="s-cancel" data-i18n="common.cancel"></button>
+      <button class="btn" type="button" id="s-save" data-i18n="common.save"></button>
     </div>
   </main>
 
-  <nav class="tabs" id="tabs" aria-label="Разделы" hidden>
-    <button class="tab" type="button" data-tab="status">Статус</button>
-    <button class="tab" type="button" data-tab="settings">Настройки</button>
+  <nav class="tabs" id="tabs" data-i18n-attr="aria-label:tabs.label" hidden>
+    <button class="tab" type="button" data-tab="status" data-i18n="tabs.status"></button>
+    <button class="tab" type="button" data-tab="settings" data-i18n="tabs.settings"></button>
   </nav>
 </div>
+<div class="tip" id="tip" role="tooltip" hidden></div>
 <script src="app.js"></script>
 </body>
 </html>

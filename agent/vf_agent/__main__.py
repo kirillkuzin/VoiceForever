@@ -9,7 +9,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from .client import Agent, AuthError, ReplacedError
-from .config import AgentConfig, ConfigError, default_path, write_template
+from . import i18n
+from .config import AgentConfig, ConfigError, default_path, peek_language, write_template
 from .plan import SendCommand
 
 # Loaded on first use only (PEP 810), so the Windows-only modules are not imported when the
@@ -43,6 +44,7 @@ def pause_and_fail(message: str) -> int:
 
 def run_headless(path: Path, test: bool) -> int:
     """The agent without a window, as before 0.3: for servers, scripts and CI."""
+    i18n.set_language(peek_language(path))  # for the reasons it reports (a bad setting, a lost connection)
     if not path.exists():
         write_template(path)
         return pause_and_fail(f"Created {path}\nFill in server_url and token, then start the agent again.")
