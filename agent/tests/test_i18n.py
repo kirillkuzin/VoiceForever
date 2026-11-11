@@ -32,19 +32,20 @@ def test_every_language_has_every_string(lang):
 def page_keys():
     html = (UI / "index.html").read_text(encoding="utf-8")
     js = (UI / "app.js").read_text(encoding="utf-8")
-    keys = set(re.findall(r'data-i18n="([^"]+)"', html))
+    keys = set(re.findall(r'data-i18n(?:-tip)?="([^"]+)"', html))
     for attrs in re.findall(r'data-i18n-attr="([^"]+)"', html):
         keys |= {pair.split(":")[1] for pair in attrs.split(";")}
     keys |= set(re.findall(r"'([a-z]+\.[a-z0-9_.]+)'", js))
     # Keys app.js builds from a state name.
     keys |= {f"conn.{s}" for s in ("connected", "connecting", "reconnecting", "disconnected", "auth_failed", "replaced")}
-    keys |= {f"game.{g}{x}" for g in ("active", "background", "closed") for x in ("", "_hint")}
+    keys |= {f"game.{g}" for g in ("active", "background", "closed")}
     keys |= {"unit.s", "unit.ms"}
     keys |= {f"voice.{v}" for v in ("stt_error", "bad_audio", "too_long", "unsupported", "offline", "timeout", "error")}
     keys |= {f"wizard.check_{c}" for c in ("checking", "ok", "auth", "failed", "replaced")}
     keys |= {f"bind.row_{r}" for r in ("game", "focus", "sent", "reload", "done")}
     keys |= {f"bind.row_{r}_now" for r in ("game", "focus", "sent", "reload")}
-    keys |= {f"bind.err_{e}{x}" for e in ("addon_missing", "no_game_folder", "chat_mode") for x in ("", "_hint")}
+    keys |= {f"bind.err_{e}" for e in ("addon_missing", "no_game_folder", "chat_mode", "not_connected")}
+    keys |= {f"bind.err_{e}_hint" for e in ("addon_missing", "no_game_folder")}
     return keys
 
 
@@ -64,6 +65,12 @@ def test_page_and_python_ask_only_for_strings_that_exist():
     source = table("en")
     assert sorted(page_keys() - source.keys()) == []
     assert sorted(python_keys() - source.keys()) == []
+
+
+def test_every_string_is_used():
+    from vf_agent.ptt import PAD_BUTTONS
+    playstation = {f"padbtn.{b.name}.ps" for b in PAD_BUTTONS}  # optional, looked up by name
+    assert sorted(table("en").keys() - page_keys() - python_keys() - playstation) == []
 
 
 def test_t_fills_placeholders_and_falls_back_to_the_key():

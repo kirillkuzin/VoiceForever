@@ -35,6 +35,7 @@
     remove: '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
     warn: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" style="flex: none"><path d="M9 2l7.5 13h-15z" fill="none" stroke="#f2ad42" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 7v4M9 13.2v.3" stroke="#f2ad42" stroke-width="1.8" stroke-linecap="round"/></svg>',
     mic: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    info: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="4.9" r="1" fill="currentColor"/><path d="M8 7.2v4.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     tg: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M14.5 2L1.5 7.2l4.3 1.6L12 4.5 7.2 9.6v4l2.4-2.6 3 2.2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
   };
 
@@ -157,6 +158,8 @@
     bind: { check: null, last: -1 }, // the in-game check: its last step, and the last one before an error
     wizardVoice: null, // the recording made on the last wizard step
   };
+
+  const TIP = { owner: null }; // the (i) whose explanation is showing
 
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const sameSettings = (a, b) => Object.keys({ ...a, ...b }).every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
@@ -281,6 +284,8 @@
         el.setAttribute(attr, t(key));
       }
     }
+    for (const el of $$('.info')) el.setAttribute('aria-label', t('common.more'));
+    hideTip();
     const names = S.languages.map((l) => h('option', { value: l.code }, l.name));
     const pick = $('#lang-pick');
     pick.replaceChildren(...names.map((o) => o.cloneNode(true)));
@@ -304,7 +309,7 @@
     renderRecording();
     renderBind();
     renderWizard();
-    $('#st-test-hint').textContent = t('status.test_hint');
+    $('#st-test-hint').textContent = '';
   }
 
   async function switchLanguage(value) {
@@ -371,18 +376,16 @@
       case 'connected': {
         const up = Math.max(0, Math.floor(now - (s.since || now)));
         const hms = `${Math.floor(up / 3600)}:${String(Math.floor((up % 3600) / 60)).padStart(2, '0')}:${String(up % 60).padStart(2, '0')}`;
-        return t('status.online', { time: hms, mode: t(S.saved && S.saved.mode === 'chat' ? 'status.mode_chat' : 'status.mode_addon') });
+        return t('status.online', { time: hms, mode: t(S.saved && S.saved.mode === 'chat' ? 'mode.chat' : 'settings.mode_addon') });
       }
-      case 'connecting': return t('status.connecting');
       case 'reconnecting': {
         const wait = Math.max(0, Math.ceil((s.retry_at || now) - now));
         return t('status.retry', { detail, s: wait, n: s.attempt });
       }
-      case 'auth_failed': return t('status.auth_failed', { detail });
-      case 'replaced': return t('status.replaced');
+      case 'connecting': case 'auth_failed': case 'replaced': return ''; // the title says it all
       default:
         if (!S.configured) return t('status.not_configured');
-        return detail || t('status.idle');
+        return detail;
     }
   }
 
@@ -400,7 +403,7 @@
       case 'connecting':
         return [button(t('common.cancel'), true, () => call('disconnect'))];
       case 'reconnecting':
-        return [button(t('action.retry_now'), false, () => call('reconnect')), button(t('action.disconnect'), true, () => call('disconnect'))];
+        return [button(t('action.retry'), false, () => call('reconnect')), button(t('action.disconnect'), true, () => call('disconnect'))];
       case 'auth_failed':
         return [button(t('action.open_settings'), false, () => { showView('settings'); $('#s-token').focus(); }), button(t('action.retry'), true, connect)];
       case 'replaced':
@@ -416,7 +419,6 @@
     pill.textContent = t(`game.${game}`);
     pill.style.color = GAME_COLORS[game];
     pill.style.borderColor = GAME_COLORS[game];
-    $('#game-hint').textContent = t(`game.${game}_hint`, { s: focusWait() });
   }
 
   function renderMessages() {
@@ -456,7 +458,7 @@
       case 'not_focused':
         return {
           line: tagged(), mark: 'wait', label: t('msgs.not_focused'),
-          note: note('warn', t('msgs.not_focused_note', { s: focusWait() })),
+          note: note('warn', t('msgs.not_focused_note')),
         };
       case 'skip':
         return {
@@ -630,7 +632,7 @@
     const line = $('#s-dirty');
     line.textContent = dirty ? t('settings.unsaved')
       : !S.configured ? t('settings.never_saved')
-      : S.savedNote || t('settings.all_saved');
+      : S.savedNote;
     line.classList.toggle('good', !dirty && Boolean(S.savedNote));
     $('#s-save').disabled = !dirty && S.configured;
     $('#s-cancel').disabled = !dirty;
@@ -650,7 +652,6 @@
     }
     for (const el of $$('[data-addon-only]')) el.hidden = mode !== 'addon';
     renderVoice();
-    $('#s-mode-hint').textContent = t(mode === 'addon' ? 'settings.mode_addon_hint' : 'settings.mode_chat_hint');
   }
 
   function renderHotkey() {
@@ -665,7 +666,7 @@
     for (const button of $$('[data-capture]')) button.disabled = S.capturing;
     const changedKey = S.saved && S.form.addon_hotkey !== S.saved.addon_hotkey;
     for (const hint of $$('[data-hotkey-hint]')) {
-      hint.textContent = changedKey ? t('hotkey.changed', { binding: wowBinding(keys) }) : t('hotkey.hint');
+      hint.textContent = changedKey ? t('hotkey.changed', { binding: wowBinding(keys) }) : '';
     }
   }
 
@@ -718,7 +719,6 @@
     const button = $('#s-detect');
     const note = $('#s-detect-note');
     button.disabled = true;
-    $('#s-detect-hint').hidden = true;
     note.hidden = false;
     note.className = 'note warn';
     let left = 5;
@@ -745,8 +745,8 @@
     renderChips();
     changed();
     note.className = 'note good';
-    note.textContent = `${t('detect.found', { title: found.title || t('detect.untitled'), exe: found.exe || t('detect.unknown') })} `
-      + t(added ? 'detect.added' : 'detect.listed');
+    note.textContent = t(added ? 'detect.added' : 'detect.listed',
+      { title: found.title || t('detect.untitled'), exe: found.exe || t('detect.unknown') });
   }
 
   async function saveSettings() {
@@ -829,14 +829,8 @@
       button.textContent = t(S.micTest ? 'mic.stop' : 'mic.test');
       button.disabled = broken;
     }
-    const micHint = broken ? t('mic.no_sdl')
-      : S.micError ? t('mic.error', { error: S.micError })
-      : S.micTest ? t('mic.testing')
-      : t('mic.idle');
-    for (const hint of $$('[data-mic-hint]')) {
-      hint.textContent = micHint;
-      hint.classList.toggle('bad', broken || Boolean(S.micError));
-    }
+    const micHint = broken ? t('mic.no_sdl') : S.micError ? t('mic.error', { error: S.micError }) : '';
+    for (const hint of $$('[data-mic-hint]')) hint.textContent = micHint;
 
     // button
     for (const card of $$('[data-padcard]')) card.classList.toggle('cap', S.padCapture);
@@ -865,18 +859,12 @@
       button.classList.toggle('sel', on);
       button.setAttribute('aria-pressed', String(on));
     }
-    const modeHint = form.ptt_mode === 'hold' ? t('ptt.hold_hint') : t('ptt.toggle_hint', { s: form.max_record_s });
-    for (const hint of $$('[data-pttmode-hint]')) hint.textContent = modeHint;
-
-    // what the game does with the same button
-    const warning = t(!addon ? 'ptt.warn_chat'
-      : form.ptt_button === 'rightstick' ? 'ptt.warn_rightstick'
-      : form.ptt_button === 'misc1' ? 'ptt.warn_share'
-      : 'ptt.warn_other');
-    for (const note of $$('[data-ptt-warn]')) {
-      note.hidden = S.padCapture;
-      note.replaceChildren(icon('warn'), h('span', {}, warning));
-    }
+    // What the game does with the same button: in the tooltip, amber when it needs attention.
+    const [tip, warn] = !addon ? ['tip.ptt_button_chat', true]
+      : form.ptt_button === 'rightstick' ? ['tip.ptt_button_rightstick', true]
+      : form.ptt_button === 'misc1' ? ['tip.ptt_button_share', true]
+      : ['tip.ptt_button', false];
+    for (const button of $$('[data-ptt-tip]')) setTip(button, tip, warn);
 
     renderStatusVoice();
     renderVoiceTest();
@@ -931,9 +919,9 @@
     $('#st-voice').hidden = !on;
     if (!on) return;
     $('#st-pad-label').textContent = padLabel(saved.ptt_button);
-    const mode = t(saved.ptt_mode === 'hold' ? 'ptt.hold_short' : 'ptt.toggle_short');
-    const mic = saved.mic_device || t('mic.default_short');
-    $('#st-pad-hint').textContent = S.pad.error ? t('pad.off_reason', { error: S.pad.error }) : `${mic} · ${mode}`;
+    const mode = t(saved.ptt_mode === 'hold' ? 'ptt.hold' : 'ptt.toggle');
+    const mic = saved.mic_device || t('mic.default');
+    $('#st-pad-hint').textContent = S.pad.error ? t('pad.broken', { error: S.pad.error }) : `${mic} · ${mode}`;
     const pill = recordingPill() || (S.pad.error ? h('span', { class: 'pill', style: 'color: var(--bad); border-color: var(--bad)' }, t('pad.pill_off'))
       : S.pad.connected ? h('span', { class: 'pill', style: 'color: var(--muted); border-color: var(--bronze)' }, t('pad.pill_ready'))
       : h('span', { class: 'pill', style: 'color: var(--off); border-color: var(--off)' }, t('pad.pill_none')));
@@ -1003,12 +991,13 @@
       let mark = 'todo';
       let { text } = row;
       let detail = '';
+      let tip = null;
       if (c && c.step === 'done') {
         mark = 'ok';
         if (i === 4 && c.previous) {
           mark = 'warn';
           text = t('bind.was_on', { name: c.previous_name || c.previous });
-          detail = t('bind.was_on_detail');
+          tip = infoButton('tip.bind_was_on');
         } else if (i === 4) {
           text = t('bind.was_free');
         }
@@ -1021,7 +1010,7 @@
       const color = mark === 'todo' ? 'var(--muted)' : mark === 'bad' ? '#ffb1a5' : 'var(--parch)';
       return h('li', { class: 'chk' }, h('span', { class: 'ic' }, ic),
         h('span', { class: 'field', style: 'gap: 1px; min-width: 0' },
-          h('span', { style: `color: ${color}` }, text), detail ? h('span', { class: 'hint' }, detail) : null));
+          h('span', { class: 'lrow', style: `color: ${color}` }, text, tip), detail ? h('span', { class: 'hint' }, detail) : null));
     });
   }
 
@@ -1030,14 +1019,14 @@
     switch (c.error) {
       case 'addon_missing':
       case 'no_game_folder':
-      case 'chat_mode':
         return [t(`bind.err_${c.error}`), t(`bind.err_${c.error}_hint`)];
       case 'wrong_button':
-        return [t('bind.err_wrong_button'), t('bind.err_wrong_button_hint', { detail: cap(c.detail), button: label })];
+        return [t('bind.err_wrong_button'), t('bind.err_wrong_button_hint', { button: label })];
+      case 'chat_mode':
       case 'not_connected':
-        return [t('bind.err_not_connected'), ''];
+        return [t(`bind.err_${c.error}`), ''];
       default:
-        return [t('bind.err_other'), c.detail ? `${cap(c.detail)}.` : ''];
+        return [t('bind.err_other'), cap(c.detail)];
     }
   }
 
@@ -1066,18 +1055,86 @@
       const cancel = h('button', { class: 'link', type: 'button', style: 'align-self: center', onclick: () => call('cancel_game_binding') }, t('common.cancel'));
       actions.replaceChildren(...(running ? [run, cancel] : [run]));
     }
-    $('#w-bind-intro').textContent = t(addon ? 'bind.intro_addon' : 'bind.intro_chat');
+    $('#w-bind-intro').textContent = addon ? '' : t('bind.intro_chat');
+    for (const button of $$('[data-bind-tip]')) setTip(button, addon ? 'tip.bind' : 'tip.ptt_button_chat', !addon);
 
     const line = $('#s-bind-line');
-    if (!addon) line.textContent = t('bind.line_chat');
+    if (!addon) line.textContent = '';
     else if (c && c.step === 'done') {
       line.textContent = c.previous ? t('bind.line_taken', { name: c.previous_name || c.previous }) : t('bind.line_free');
     } else line.textContent = t('bind.line_unchecked');
     $('#s-bind-open').hidden = !addon || !$('#s-bind-box').hidden;
+    for (const button of $$('#view-settings [data-bind-tip]')) button.hidden = !addon;
+  }
+
+  // ------------------------------------------------------------------ tooltips
+  // Explanations live behind an (i) next to a label: data-i18n-tip names the string. One
+  // floating box shows it on hover or keyboard focus, and a click pins it for touch screens.
+  function infoButton(key, warn = false) {
+    const button = h('button', { class: 'info', type: 'button', 'aria-label': t('common.more') });
+    setTip(button, key, warn);
+    return button;
+  }
+
+  function setTip(button, key, warn = false) {
+    button.dataset.i18nTip = key;
+    button.classList.toggle('warn', warn);
+    if (!button.firstElementChild) button.append(icon('info'));
+    if (TIP.owner === button) showTip(button);
+  }
+
+  function showTip(button) {
+    const box = $('#tip');
+    TIP.owner = button;
+    box.textContent = t(button.dataset.i18nTip, { s: focusWait() });
+    box.classList.toggle('warn', button.classList.contains('warn'));
+    box.hidden = false;
+    button.classList.add('open');
+    button.setAttribute('aria-describedby', 'tip');
+    // Below the icon, or above it when the window ends; never past the window's sides.
+    const r = button.getBoundingClientRect();
+    const w = box.offsetWidth;
+    const hgt = box.offsetHeight;
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - 24), window.innerWidth - w - 8);
+    const below = r.bottom + 8 + hgt <= window.innerHeight - 8;
+    box.style.left = `${left}px`;
+    box.style.top = `${below ? r.bottom + 8 : Math.max(8, r.top - 8 - hgt)}px`;
+  }
+
+  function hideTip() {
+    if (!TIP.owner) return;
+    TIP.owner.classList.remove('open');
+    TIP.owner.removeAttribute('aria-describedby');
+    TIP.owner = null;
+    $('#tip').hidden = true;
+  }
+
+  function bindTips() {
+    for (const button of $$('.info')) if (!button.firstElementChild) button.append(icon('info'));
+    const owner = (e) => e.target.closest && e.target.closest('.info[data-i18n-tip]');
+    document.addEventListener('mouseover', (e) => { const b = owner(e); if (b && b !== TIP.owner) showTip(b); });
+    document.addEventListener('mouseout', (e) => { const b = owner(e); if (b && !b.contains(e.relatedTarget) && document.activeElement !== b) hideTip(); });
+    document.addEventListener('focusin', (e) => { const b = owner(e); if (b) showTip(b); else hideTip(); });
+    document.addEventListener('focusout', (e) => { if (owner(e)) hideTip(); });
+    document.addEventListener('click', (e) => {
+      const b = owner(e);
+      if (b) {
+        e.preventDefault(); // inside a switch's label, the click must not flip the switch
+        showTip(b);
+      } else hideTip();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && TIP.owner) hideTip(); });
+    document.addEventListener('scroll', () => { // follow the (i), or let go once it scrolls away
+      if (!TIP.owner) return;
+      const r = TIP.owner.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) hideTip(); else showTip(TIP.owner);
+    }, true);
+    window.addEventListener('resize', hideTip);
   }
 
   // ------------------------------------------------------------------ wiring
   function bindControls() {
+    bindTips();
     $('#btn-minimize').addEventListener('click', () => call('minimize'));
     $('#btn-close').addEventListener('click', () => call('close'));
     $('#lang-pick').addEventListener('change', (e) => switchLanguage(e.target.value));
@@ -1197,7 +1254,7 @@
 
     $('#st-test').addEventListener('click', () => runTest($('#st-test'),
       (left) => { $('#st-test-hint').textContent = t('status.test_wait', { s: left }); },
-      () => { $('#st-test-hint').textContent = t('status.test_hint'); }));
+      () => { $('#st-test-hint').textContent = ''; }));
     $('#btn-log').addEventListener('click', () => call('open_log'));
 
     $('#s-detect').addEventListener('click', detectGame);
