@@ -240,7 +240,7 @@ def test_get_state_carries_the_language(tmp_path):
     assert state["language"] == "" and state["lang"] == "en"
     assert [l["code"] for l in state["languages"]] == ["en", "ru", "de", "es", "fr"]
     assert state["strings"]["tabs.settings"] == "Settings"
-    assert state["pad_buttons"][0] == {"name": "rightstick", "xbox": "Right stick (RS)", "playstation": "Right stick (R3)"}
+    assert state["pad_buttons"][0] == {"name": "leftstick", "xbox": "Left stick (LS)", "playstation": "Left stick (L3)"}
 
 
 def test_set_language_switches_strings_and_buttons(tmp_path):
@@ -249,7 +249,7 @@ def test_set_language_switches_strings_and_buttons(tmp_path):
     result = api.set_language("fr")
     assert result["language"] == "fr" and result["lang"] == "fr" and host.draft["language"] == "fr"
     assert result["strings"]["tabs.settings"] == "Réglages"
-    assert result["pad_buttons"][0]["xbox"] == "Stick droit (RS)"
+    assert result["pad_buttons"][0]["xbox"] == "Stick gauche (LS)"
     assert api.check_config(defaults())["server_url"].startswith("Indique l'adresse")
     assert api.set_language("klingon")["language"] == ""  # unknown: back to the system language
 

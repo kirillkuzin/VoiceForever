@@ -145,12 +145,12 @@ def of(events, kind):
 async def test_toggle_records_and_types(setup):
     c, pad, backend, events, _, _ = setup
     assert c.snapshot()["pad"] == PadState(True, "Xbox Controller", False)
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: c.snapshot()["recording"].state is RecState.RECORDING)
     assert pad.open == ("", True)
-    pad.press("rightstick", down=False)  # release does nothing in toggle mode
+    pad.press("leftstick", down=False)  # release does nothing in toggle mode
     await asyncio.sleep(0.35)
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: of(events, VoiceResult))
     [result] = of(events, VoiceResult)
     assert (result.status, result.label, result.text) == ("ok", "Гильдия", "Всем привет")
@@ -163,23 +163,23 @@ async def test_toggle_records_and_types(setup):
 
 async def test_hold_mode_and_other_buttons(setup):
     c, pad, backend, events, _, configure = setup
-    await asyncio.to_thread(configure, ptt_mode=PttMode.HOLD, ptt_button="leftstick", mic_device="Headset")
-    pad.press("rightstick")  # not the push-to-talk button any more
+    await asyncio.to_thread(configure, ptt_mode=PttMode.HOLD, ptt_button="rightstick", mic_device="Headset")
+    pad.press("leftstick")  # not the push-to-talk button any more
     await asyncio.sleep(0.1)
     assert pad.open is None
-    pad.press("leftstick")
+    pad.press("rightstick")
     await until(lambda: pad.open == ("Headset", True))
     await asyncio.sleep(0.35)
-    pad.press("leftstick", down=False)
+    pad.press("rightstick", down=False)
     await until(lambda: of(events, VoiceResult))
     assert backend.pastes() == ["VF:guild::Всем привет"]
 
 
 async def test_short_press_is_dropped(setup):
     c, pad, backend, events, _, _ = setup
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: pad.open)
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: pad.beeps == ["start", "cancel"])
     await asyncio.sleep(0.2)
     assert of(events, VoiceResult) == [] and backend.pastes() == []
@@ -188,7 +188,7 @@ async def test_short_press_is_dropped(setup):
 async def test_nothing_starts_without_the_game_in_front(setup):
     c, pad, backend, events, _, _ = setup
     backend.game = GameState.BACKGROUND
-    pad.press("rightstick")
+    pad.press("leftstick")
     await asyncio.sleep(0.2)
     assert pad.open is None and of(events, Recording) == []
 
@@ -196,10 +196,10 @@ async def test_nothing_starts_without_the_game_in_front(setup):
 async def test_refused_voice_tells_the_addon(setup):
     c, pad, backend, events, replies, _ = setup
     replies["status"] = "empty"
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: pad.open)
     await asyncio.sleep(0.35)
-    pad.press("rightstick")
+    pad.press("leftstick")
     await until(lambda: backend.pastes())
     assert backend.pastes() == ["VF:status:empty:Didn't catch a word"]
     assert of(events, VoiceResult)[0].status == "empty"
@@ -233,18 +233,18 @@ async def test_bind_check(setup):
     m = re.fullmatch(r"VF:ptt:setup:toggle 30 ([0-9a-f]{8})", line)
     assert m, line
     await until(lambda: [b.step for b in of(events, BindCheck)][-1:] == ["sent"])
-    pad.press("rightstick")  # in the game, the addon catches this press
+    pad.press("leftstick")  # in the game, the addon catches this press
     await until(lambda: of(events, BindCheck)[-1].step == "reloading")
     write_result(backend, m[1])
     await until(lambda: of(events, BindCheck)[-1].step == "done")
     result = of(events, BindCheck)[-1]
-    assert (result.key, result.previous, result.taken) == ("PADRSTICK", "TOGGLEPINGLISTENER", True)
+    assert (result.key, result.previous, result.taken) == ("PADLSTICK", "TOGGLEPINGLISTENER", True)
     assert result.previous_name == "Метка цели"
     assert [b.step for b in of(events, BindCheck)] == ["waiting_game", "waiting_focus", "sent", "reloading", "done"]
     assert pad.open is None
 
 
-def write_result(backend, nonce: str, key: str = "PADRSTICK") -> None:
+def write_result(backend, nonce: str, key: str = "PADLSTICK") -> None:
     """What the addon saves after the player pressed the button in the game and it reloaded."""
     saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
     saved.parent.mkdir(parents=True, exist_ok=True)
@@ -262,9 +262,9 @@ async def test_bind_check_notices_another_button(setup):
     await until(lambda: backend.pastes())
     nonce = backend.pastes()[0].rsplit(" ", 1)[1]
     await until(lambda: of(events, BindCheck)[-1].step == "sent")
-    pad.press("leftstick")  # the agent records on the right stick
+    pad.press("rightstick")  # the agent records on the left stick
     await until(lambda: of(events, BindCheck)[-1].step == "reloading")
-    write_result(backend, nonce, key="PADLSTICK")
+    write_result(backend, nonce, key="PADRSTICK")
     await until(lambda: of(events, BindCheck)[-1].step == "error")
     result = of(events, BindCheck)[-1]
     assert result.error == "wrong_button"
@@ -292,7 +292,7 @@ async def test_addon_gets_a_changed_mode(setup, monkeypatch):
     c, pad, backend, events, _, configure = setup
     saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
     saved.parent.mkdir(parents=True)
-    saved.write_text('VoiceForeverDB = { ["ptt"] = { ["key"] = "PADRSTICK", ["mode"] = "toggle", ["max"] = 30 } }')
+    saved.write_text('VoiceForeverDB = { ["ptt"] = { ["key"] = "PADLSTICK", ["mode"] = "toggle", ["max"] = 30 } }')
     await asyncio.sleep(0.4)
     assert backend.pastes() == []  # the addon already has these settings
     await asyncio.to_thread(configure, ptt_mode=PttMode.HOLD, max_record_s=20)
