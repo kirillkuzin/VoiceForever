@@ -7,6 +7,8 @@ recording badge in the game, so the two stay in step without talking to each oth
 from dataclasses import dataclass
 from enum import StrEnum
 
+from . import i18n
+
 MIN_RECORD_S = 0.3  # shorter recordings are accidental presses and are dropped
 
 
@@ -25,32 +27,40 @@ class Cmd(StrEnum):
 class PadButton:
     name: str  # value in config.toml
     sdl: int  # SDL_GamepadButton
-    xbox: str
-    playstation: str
+
+    @property
+    def xbox(self) -> str:
+        """The button's name on an Xbox pad, in the window's language."""
+        return i18n.t(f"padbtn.{self.name}")
+
+    @property
+    def playstation(self) -> str:
+        """Its name on a DualSense; the same as on Xbox where the locale has no own one."""
+        return i18n.strings(i18n.current()).get(f"padbtn.{self.name}.ps") or self.xbox
 
 
-# The Guide / PS button is left out: Windows and Steam use it.
+# The Guide / PS button is left out: Windows and Steam use it. Names: padbtn.* in ui/locales.
 PAD_BUTTONS: tuple[PadButton, ...] = (
-    PadButton("rightstick", 8, "Правый стик (RS)", "Правый стик (R3)"),
-    PadButton("leftstick", 7, "Левый стик (LS)", "Левый стик (L3)"),
-    PadButton("misc1", 15, "Share", "Кнопка микрофона"),
-    PadButton("back", 4, "View", "Create"),
-    PadButton("start", 6, "Menu", "Options"),
-    PadButton("touchpad", 20, "Тачпад", "Тачпад"),
-    PadButton("a", 0, "A", "Крест"),
-    PadButton("b", 1, "B", "Круг"),
-    PadButton("x", 2, "X", "Квадрат"),
-    PadButton("y", 3, "Y", "Треугольник"),
-    PadButton("leftshoulder", 9, "LB", "L1"),
-    PadButton("rightshoulder", 10, "RB", "R1"),
-    PadButton("dpup", 11, "Крестовина вверх", "Крестовина вверх"),
-    PadButton("dpdown", 12, "Крестовина вниз", "Крестовина вниз"),
-    PadButton("dpleft", 13, "Крестовина влево", "Крестовина влево"),
-    PadButton("dpright", 14, "Крестовина вправо", "Крестовина вправо"),
-    PadButton("paddle1", 16, "Лепесток P1", "Кнопка RB (Edge)"),
-    PadButton("paddle2", 17, "Лепесток P3", "Кнопка LB (Edge)"),
-    PadButton("paddle3", 18, "Лепесток P2", "Правая Fn (Edge)"),
-    PadButton("paddle4", 19, "Лепесток P4", "Левая Fn (Edge)"),
+    PadButton("rightstick", 8),
+    PadButton("leftstick", 7),
+    PadButton("misc1", 15),
+    PadButton("back", 4),
+    PadButton("start", 6),
+    PadButton("touchpad", 20),
+    PadButton("a", 0),
+    PadButton("b", 1),
+    PadButton("x", 2),
+    PadButton("y", 3),
+    PadButton("leftshoulder", 9),
+    PadButton("rightshoulder", 10),
+    PadButton("dpup", 11),
+    PadButton("dpdown", 12),
+    PadButton("dpleft", 13),
+    PadButton("dpright", 14),
+    PadButton("paddle1", 16),
+    PadButton("paddle2", 17),
+    PadButton("paddle3", 18),
+    PadButton("paddle4", 19),
 )
 BY_NAME: frozendict[str, PadButton] = frozendict({b.name: b for b in PAD_BUTTONS})
 BY_SDL: frozendict[int, PadButton] = frozendict({b.sdl: b for b in PAD_BUTTONS})

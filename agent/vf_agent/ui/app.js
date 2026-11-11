@@ -1,5 +1,7 @@
 // VoiceForever agent window. Talks to Python through window.pywebview.api (see gui/api.py);
 // Python pushes connection, game and message events into window.vf.onEvent.
+// Every word on screen comes from t(): Python sends the strings of the chosen language
+// (ui/locales/<code>.json), and the page redraws itself when the language changes.
 'use strict';
 
 (() => {
@@ -37,37 +39,50 @@
   };
 
   // ------------------------------------------------------------------ words
+  let L = {}; // the strings of the current language
+
+  function t(key, values) {
+    const text = L[key] ?? key;
+    return values ? text.replace(/\{(\w+)\}/g, (m, name) => (name in values ? String(values[name]) : m)) : text;
+  }
+
+  // The same, where a {placeholder} may be a node: a bold button name inside a sentence.
+  function tNodes(key, values) {
+    return (L[key] ?? key).split(/(\{\w+\})/).filter(Boolean).map((part) => {
+      const m = /^\{(\w+)\}$/.exec(part);
+      return m && m[1] in values ? values[m[1]] : part;
+    });
+  }
+
+  const cap = (text) => (text ? text[0].toUpperCase() + text.slice(1) : '');
+
   const STATES = {
-    connected: { title: 'На связи', c1: '#5ed474', c2: '#1d6b2c', glow: 'rgba(94,212,116,.55)' },
-    connecting: { title: 'Подключение…', c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.5)', pulse: true },
-    reconnecting: { title: 'Связь потеряна', c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.45)' },
-    disconnected: { title: 'Отключено', c1: '#a59a88', c2: '#3a342b', glow: 'rgba(0,0,0,0)' },
-    auth_failed: { title: 'Токен не принят', c1: '#ff7563', c2: '#7a1a10', glow: 'rgba(255,117,99,.5)' },
-    replaced: { title: 'Агент на другом ПК', c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.35)' },
+    connected: { c1: '#5ed474', c2: '#1d6b2c', glow: 'rgba(94,212,116,.55)' },
+    connecting: { c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.5)', pulse: true },
+    reconnecting: { c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.45)' },
+    disconnected: { c1: '#a59a88', c2: '#3a342b', glow: 'rgba(0,0,0,0)' },
+    auth_failed: { c1: '#ff7563', c2: '#7a1a10', glow: 'rgba(255,117,99,.5)' },
+    replaced: { c1: '#f2ad42', c2: '#7a4a0c', glow: 'rgba(242,173,66,.35)' },
   };
 
-  const GAME = {
-    active: { label: 'окно активно', color: '#5ed474', hint: () => 'Сообщения сразу уходят в чат.' },
-    background: { label: 'в фоне', color: '#f2ad42', hint: () => `Сообщение подождёт до ${focusWait()} с, пока ты вернёшься в игру.` },
-    closed: { label: 'не запущена', color: '#a59a88', hint: () => 'Агент найдёт окно, когда игра запустится.' },
-  };
+  const GAME_COLORS = { active: '#5ed474', background: '#f2ad42', closed: '#a59a88' };
 
-  const CHANNEL_NAMES = { 1: 'Общий', 2: 'Торговля' };
+  const CHANNEL_NAMES = { 1: 'chan.general', 2: 'chan.trade' };
 
   function channelLabel(channel, target) {
     switch (channel) {
-      case 'say': return ['Сказать', '#f3eee6'];
-      case 'yell': return ['Крик', '#ff6a5a'];
-      case 'emote': return ['Эмоция', '#ff9a5a'];
-      case 'group': case 'party': return ['Группа', '#aab4ff'];
-      case 'raid': return ['Рейд', '#ff9a4a'];
-      case 'raid_warning': return ['Объявление рейду', '#ff7a3a'];
-      case 'instance': return ['Подземелье', '#ff9a4a'];
-      case 'guild': return ['Гильдия', '#56e06a'];
-      case 'officer': return ['Офицер', '#48c858'];
-      case 'whisper': return [target ? `Шёпот → ${target}` : 'Шёпот', '#ff8ef0'];
-      case 'reply': return ['Ответ на шёпот', '#ff8ef0'];
-      case 'channel': return [CHANNEL_NAMES[target] ? `${target}. ${CHANNEL_NAMES[target]}` : `Канал ${target}`, '#ffc8b0'];
+      case 'say': return [t('chan.say'), '#f3eee6'];
+      case 'yell': return [t('chan.yell'), '#ff6a5a'];
+      case 'emote': return [t('chan.emote'), '#ff9a5a'];
+      case 'group': case 'party': return [t('chan.group'), '#aab4ff'];
+      case 'raid': return [t('chan.raid'), '#ff9a4a'];
+      case 'raid_warning': return [t('chan.raid_warning'), '#ff7a3a'];
+      case 'instance': return [t('chan.instance'), '#ff9a4a'];
+      case 'guild': return [t('chan.guild'), '#56e06a'];
+      case 'officer': return [t('chan.officer'), '#48c858'];
+      case 'whisper': return [target ? t('chan.whisper_to', { name: target }) : t('chan.whisper'), '#ff8ef0'];
+      case 'reply': return [t('chan.reply'), '#ff8ef0'];
+      case 'channel': return [CHANNEL_NAMES[target] ? `${target}. ${t(CHANNEL_NAMES[target])}` : t('chan.numbered', { n: target }), '#ffc8b0'];
       default: return [channel, '#f3eee6'];
     }
   }
@@ -95,19 +110,11 @@
     return [...mods, ...rest].join('-').toUpperCase();
   }
 
-  const TEST_HINT = 'Строка уйдёт в /say, когда окно WoW станет активным.';
   const TEST_TEXT = 'VoiceForever test';
 
-  // What became of a recording, when nothing reached the chat (VoiceResult.status).
-  const VOICE_FAILED = {
-    stt_error: 'не смог распознать речь',
-    bad_audio: 'не смог прочитать запись',
-    too_long: 'запись длиннее, чем он принимает',
-    unsupported: 'не принимает голос от агента, его нужно обновить',
-    offline: 'нет связи',
-    timeout: 'не ответил вовремя',
-    error: 'ошибка на сервере',
-  };
+  // What became of a recording, when nothing reached the chat (VoiceResult.status): our own
+  // words for the statuses we know, so they follow the window's language.
+  const VOICE_FAILED = ['stt_error', 'bad_audio', 'too_long', 'unsupported', 'offline', 'timeout', 'error'];
 
   const LEVEL_BARS = 24;
   const HOT_BAR = 20; // from here the meter turns red: too loud
@@ -118,6 +125,12 @@
   // ------------------------------------------------------------------ state
   const S = {
     ready: false,
+    lang: 'en', // the language in use
+    language: '', // the setting: '' follows Windows
+    systemLang: 'en',
+    languages: [], // [{ code, name }]
+    version: '',
+    errors: {}, // the problems shown next to the fields
     pending: [],
     seq: 0,
     configured: false,
@@ -178,18 +191,13 @@
     S.recording = state.recording;
     S.padButtons = state.pad_buttons;
     S.bind.check = state.bind_check;
-    $('#version').textContent = `агент ${state.version}`;
+    S.version = state.version;
+    S.languages = state.languages;
+    applyLanguage(state);
     for (const meter of $$('.lvl')) meter.replaceChildren(...Array.from({ length: LEVEL_BARS }, () => h('span')));
 
     bindControls();
-    fillForm();
-    renderStatus();
-    renderGame();
-    renderMessages();
-    renderVoice();
-    renderRecording();
-    renderBind();
-    $('#st-test-hint').textContent = TEST_HINT;
+    renderAll();
 
     if (state.first_run) {
       showErrors(state.errors);
@@ -259,6 +267,60 @@
   window.addEventListener('pywebviewready', init);
   init();
 
+  // ------------------------------------------------------------------ language
+  function applyLanguage(state) {
+    L = state.strings;
+    S.lang = state.lang;
+    S.language = state.language;
+    S.systemLang = state.system_lang;
+    document.documentElement.lang = S.lang;
+    for (const el of $$('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+    for (const el of $$('[data-i18n-attr]')) {
+      for (const pair of el.dataset.i18nAttr.split(';')) {
+        const [attr, key] = pair.split(':');
+        el.setAttribute(attr, t(key));
+      }
+    }
+    const names = S.languages.map((l) => h('option', { value: l.code }, l.name));
+    const pick = $('#lang-pick');
+    pick.replaceChildren(...names.map((o) => o.cloneNode(true)));
+    pick.value = S.lang;
+    $('#lang-code').textContent = S.lang.toUpperCase();
+    const system = S.languages.find((l) => l.code === S.systemLang);
+    const setting = $('#s-lang');
+    setting.replaceChildren(h('option', { value: '' }, t('settings.language_auto', { name: system ? system.name : S.systemLang })), ...names);
+    setting.value = S.language;
+  }
+
+  // Everything drawn from state, again: after the start and after a language change.
+  function renderAll() {
+    $('#version').textContent = t('app.version', { version: S.version });
+    for (const button of $$('[data-reveal]')) button.textContent = t($(`#${button.dataset.reveal}`).type === 'password' ? 'common.show' : 'common.hide');
+    S.actionsFor = null;
+    fillForm();
+    renderStatus();
+    renderGame();
+    renderMessages();
+    renderRecording();
+    renderBind();
+    renderWizard();
+    $('#st-test-hint').textContent = t('status.test_hint');
+  }
+
+  async function switchLanguage(value) {
+    const result = await call('set_language', value);
+    if (!result) return;
+    applyLanguage(result);
+    S.padButtons = result.pad_buttons;
+    for (const values of [S.form, S.saved]) if (values) values.language = result.language;
+    renderAll();
+    const shown = Object.keys(S.errors);
+    if (shown.length) { // the same problems, in the new language
+      const errors = (await call('check_config', S.form)) || {};
+      showErrors(Object.fromEntries(shown.filter((k) => errors[k]).map((k) => [k, errors[k]])));
+    }
+  }
+
   // ------------------------------------------------------------------ views
   function showView(name) {
     if (name !== S.view) setMicTest(false);
@@ -274,6 +336,7 @@
   }
 
   function showErrors(errors = {}) {
+    S.errors = errors;
     for (const el of $$('[data-error-for]')) el.textContent = errors[el.dataset.errorFor] || '';
     for (const input of $$('[data-field]')) input.classList.toggle('bad', Boolean(errors[input.dataset.field]));
     const fileError = $('#s-file-error');
@@ -290,9 +353,9 @@
     orb.style.boxShadow = `0 0 0 3px #0b0907, 0 0 0 5px #7d6130, 0 0 0 6px #000, 0 0 26px ${look.glow}`;
     orb.classList.toggle('pulse', Boolean(look.pulse));
     const title = $('#st-title');
-    title.textContent = look.title;
+    title.textContent = t(`conn.${STATES[s.state] ? s.state : 'disconnected'}`);
     title.style.color = look.c1;
-    $('#st-url').textContent = S.saved && S.saved.server_url ? S.saved.server_url : 'Адрес сервера ещё не задан';
+    $('#st-url').textContent = S.saved && S.saved.server_url ? S.saved.server_url : t('status.no_url');
     renderStatusLine();
     const key = `${s.state}|${S.configured}`;
     if (S.actionsFor !== key) {
@@ -303,23 +366,23 @@
 
   function statusLine(s) {
     const now = Date.now() / 1000;
-    const detail = s.detail ? s.detail[0].toUpperCase() + s.detail.slice(1) : '';
+    const detail = cap(s.detail);
     switch (s.state) {
       case 'connected': {
         const up = Math.max(0, Math.floor(now - (s.since || now)));
         const hms = `${Math.floor(up / 3600)}:${String(Math.floor((up % 3600) / 60)).padStart(2, '0')}:${String(up % 60).padStart(2, '0')}`;
-        return `В сети ${hms} · режим: ${S.saved && S.saved.mode === 'chat' ? 'обычный чат' : 'аддон'}`;
+        return t('status.online', { time: hms, mode: t(S.saved && S.saved.mode === 'chat' ? 'status.mode_chat' : 'status.mode_addon') });
       }
-      case 'connecting': return 'Открываю соединение, жду ответа до 15 с';
+      case 'connecting': return t('status.connecting');
       case 'reconnecting': {
         const wait = Math.max(0, Math.ceil((s.retry_at || now) - now));
-        return `${detail}. Повтор через ${wait} с, попытка ${s.attempt}`;
+        return t('status.retry', { detail, s: wait, n: s.attempt });
       }
-      case 'auth_failed': return `${detail}. Проверь токен в настройках`;
-      case 'replaced': return 'С этим токеном подключились с другого компьютера';
+      case 'auth_failed': return t('status.auth_failed', { detail });
+      case 'replaced': return t('status.replaced');
       default:
-        if (!S.configured) return 'Сначала заполни и сохрани настройки';
-        return detail || 'Сообщения из Telegram сейчас не дойдут до игры';
+        if (!S.configured) return t('status.not_configured');
+        return detail || t('status.idle');
     }
   }
 
@@ -333,27 +396,27 @@
     const connect = () => call('connect');
     switch (state) {
       case 'connected':
-        return [button('Отключить', true, () => call('disconnect')), button('Переподключить', true, () => call('reconnect'))];
+        return [button(t('action.disconnect'), true, () => call('disconnect')), button(t('action.reconnect'), true, () => call('reconnect'))];
       case 'connecting':
-        return [button('Отменить', true, () => call('disconnect'))];
+        return [button(t('common.cancel'), true, () => call('disconnect'))];
       case 'reconnecting':
-        return [button('Повторить сейчас', false, () => call('reconnect')), button('Отключить', true, () => call('disconnect'))];
+        return [button(t('action.retry_now'), false, () => call('reconnect')), button(t('action.disconnect'), true, () => call('disconnect'))];
       case 'auth_failed':
-        return [button('Открыть настройки', false, () => { showView('settings'); $('#s-token').focus(); }), button('Повторить', true, connect)];
+        return [button(t('action.open_settings'), false, () => { showView('settings'); $('#s-token').focus(); }), button(t('action.retry'), true, connect)];
       case 'replaced':
-        return [button('Подключить здесь', false, connect)];
+        return [button(t('action.connect_here'), false, connect)];
       default:
-        return [button('Подключить', false, connect, !S.configured)];
+        return [button(t('action.connect'), false, connect, !S.configured)];
     }
   }
 
   function renderGame() {
-    const game = GAME[S.game] || GAME.closed;
+    const game = GAME_COLORS[S.game] ? S.game : 'closed';
     const pill = $('#game-pill');
-    pill.textContent = game.label;
-    pill.style.color = game.color;
-    pill.style.borderColor = game.color;
-    $('#game-hint').textContent = game.hint();
+    pill.textContent = t(`game.${game}`);
+    pill.style.color = GAME_COLORS[game];
+    pill.style.borderColor = GAME_COLORS[game];
+    $('#game-hint').textContent = t(`game.${game}_hint`, { s: focusWait() });
   }
 
   function renderMessages() {
@@ -361,19 +424,19 @@
     // A recording's message comes twice: as typed, then with what the server made of it. Keep the second.
     const rows = S.history.filter((d) => !(d.kind === 'delivery' && d.voice_id));
     if (!rows.length) {
-      list.replaceChildren(h('li', { class: 'hint empty' }, 'Пока пусто. Скажи что-нибудь с геймпада, боту в Telegram или нажми «Тест в /say».'));
+      list.replaceChildren(h('li', { class: 'hint empty' }, t('msgs.empty')));
       return;
     }
     list.replaceChildren(...rows.map((d) => {
-      const time = new Date(d.at * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const time = new Date(d.at * 1000).toLocaleTimeString(S.lang, { hour: '2-digit', minute: '2-digit' });
       const voice = d.kind === 'voice';
       const test = !voice && d.channel === 'say' && d.text === TEST_TEXT;
-      const source = voice ? 'Голос с геймпада' : test ? 'Тест' : 'Голосовое из Telegram';
+      const source = t(voice ? 'msgs.from_pad' : test ? 'msgs.from_test' : 'msgs.from_telegram');
       const view = messageView(d);
       return h('li', { class: 'msg' },
         h('span', { class: 'time' }, time),
         h('span', { class: 'src', role: 'img', 'aria-label': source, title: source }, test ? null : icon(voice ? 'mic' : 'tg')),
-        h('div', { class: 'field', style: 'gap: 2px; min-width: 0', title: d.transcript ? `Распознано: «${d.transcript}»` : null },
+        h('div', { class: 'field', style: 'gap: 2px; min-width: 0', title: d.transcript ? t('msgs.heard', { text: d.transcript }) : null },
           view.line, view.note),
         h('span', { role: 'img', 'aria-label': view.label, title: view.label, style: 'padding-top: 2px' }, icon(view.mark)));
     }));
@@ -389,29 +452,30 @@
     const note = (kind, text) => h('span', { class: `mdetail ${kind}` }, text);
     switch (d.status) {
       case 'ok':
-        return { line: tagged(), note: null, mark: 'ok', label: 'Отправлено в игру' };
+        return { line: tagged(), note: null, mark: 'ok', label: t('msgs.sent') };
       case 'not_focused':
         return {
-          line: tagged(), mark: 'wait', label: 'Не отправлено: окно WoW не было активно',
-          note: note('warn', `Окно WoW не стало активным за ${focusWait()} с, сообщение не ушло.`),
+          line: tagged(), mark: 'wait', label: t('msgs.not_focused'),
+          note: note('warn', t('msgs.not_focused_note', { s: focusWait() })),
         };
       case 'skip':
         return {
-          line: plain(d.transcript ? `«${d.transcript}»` : 'Запись без текста'), mark: 'wait', label: 'Не для чата',
-          note: note('muted', 'Не похоже на сообщение в чат, ничего не ушло.'),
+          line: plain(d.transcript ? t('msgs.quote', { text: d.transcript }) : t('msgs.no_text')), mark: 'wait', label: t('msgs.not_for_chat'),
+          note: note('muted', t('msgs.skip_note')),
         };
       case 'empty':
-        return { line: plain('Не расслышал, в чат ничего не ушло'), note: null, mark: 'wait', label: 'Пустая запись' };
+        return { line: plain(t('msgs.empty_voice')), note: null, mark: 'wait', label: t('msgs.empty_voice_label') };
       default:
         if (d.kind === 'voice' && !d.text) {
-          return {
-            line: plain('Запись не принята'), mark: 'bad', label: 'Отказ сервера',
-            note: note('bad', `Сервер: ${d.detail || VOICE_FAILED[d.status] || VOICE_FAILED.error}.`),
-          };
+          // Known statuses in our words, so they follow the window's language; the server's own goes to the tooltip.
+          const why = VOICE_FAILED.includes(d.status) ? t(`voice.${d.status}`) : d.detail || t('voice.error');
+          const line = plain(t('msgs.voice_refused'));
+          if (d.detail) line.title = d.detail;
+          return { line, mark: 'bad', label: t('msgs.voice_refused_label'), note: note('bad', t('msgs.server_said', { detail: why })) };
         }
         return {
-          line: d.text ? tagged() : plain('Сообщение не ушло'), mark: 'bad', label: 'Ошибка ввода',
-          note: note('bad', `Не получилось ввести: ${d.detail || 'неизвестная ошибка'}`),
+          line: d.text ? tagged() : plain(t('msgs.not_sent')), mark: 'bad', label: t('msgs.input_error'),
+          note: note('bad', t('msgs.input_failed', { detail: d.detail || t('msgs.unknown_error') })),
         };
     }
   }
@@ -421,7 +485,7 @@
     let left = focusWait();
     onTick(left);
     const timer = setInterval(() => onTick((left = Math.max(0, left - 1))), 1000);
-    const result = (await call('send_test')) || { status: 'error', detail: 'агент не ответил' };
+    const result = (await call('send_test')) || { status: 'error', detail: t('msgs.agent_silent') };
     clearInterval(timer);
     button.disabled = false;
     onDone(result);
@@ -444,7 +508,7 @@
     $('#w-skip').hidden = !(step === 1 && (check === 'failed' || check === 'replaced'));
     $('#w-later').hidden = !(step === 4 && !(S.bind.check && S.bind.check.step === 'done'));
     const next = $('#w-next');
-    next.textContent = ['Подключиться', 'Далее', 'Далее', 'Готово'][step - 1];
+    next.textContent = t(['wizard.connect', 'common.next', 'common.next', 'common.done'][step - 1]);
     next.disabled = step === 1 && check === 'checking';
     $$('[data-focus-wait]').forEach((el) => { el.textContent = focusWait(); });
     renderCheck();
@@ -454,13 +518,7 @@
     const { check, detail } = S.wizard;
     const box = $('#w-check');
     box.hidden = check === 'idle';
-    const text = {
-      checking: 'Подключаюсь к серверу, жду ответа до 15 секунд…',
-      ok: 'Сервер ответил, токен принят.',
-      auth: `Сервер не принял токен (${detail}). Сверь его со строкой VF_USERS на сервере.`,
-      failed: `Не удалось подключиться: ${detail}. Агент будет пробовать сам, настройку можно продолжить.`,
-      replaced: 'С этим токеном только что подключился другой агент.',
-    }[check];
+    const text = ['checking', 'ok', 'auth', 'failed', 'replaced'].includes(check) ? t(`wizard.check_${check}`, { detail }) : '';
     const kind = { checking: 'warn', ok: 'good', auth: 'bad', failed: 'bad', replaced: 'warn' }[check];
     box.className = `note ${kind || ''}`;
     if (check === 'checking') {
@@ -543,6 +601,7 @@
       showRange(range);
     }
     for (const box of $$('[data-check]')) box.checked = Boolean(S.form[box.dataset.check]);
+    $('#s-lang').value = S.language;
     $('#w-auto').checked = Boolean(S.form.connect_on_start);
     $('#w-boot').checked = Boolean(S.form.autostart);
     $('#s-path').textContent = S.configPath;
@@ -554,7 +613,7 @@
   }
 
   function showRange(range) {
-    $(`output[for="${range.id}"]`).textContent = `${S.form[range.dataset.range]} ${range.dataset.unit}`;
+    $(`output[for="${range.id}"]`).textContent = `${S.form[range.dataset.range]} ${t(`unit.${range.dataset.unit}`)}`;
   }
 
   function applySaved(config) {
@@ -569,9 +628,9 @@
   function renderDirty() {
     const dirty = !sameSettings(S.form, S.saved);
     const line = $('#s-dirty');
-    line.textContent = dirty ? 'Есть несохранённые изменения'
-      : !S.configured ? 'Настройки ещё не сохранены'
-      : S.savedNote || 'Все изменения сохранены';
+    line.textContent = dirty ? t('settings.unsaved')
+      : !S.configured ? t('settings.never_saved')
+      : S.savedNote || t('settings.all_saved');
     line.classList.toggle('good', !dirty && Boolean(S.savedNote));
     $('#s-save').disabled = !dirty && S.configured;
     $('#s-cancel').disabled = !dirty;
@@ -591,16 +650,14 @@
     }
     for (const el of $$('[data-addon-only]')) el.hidden = mode !== 'addon';
     renderVoice();
-    $('#s-mode-hint').textContent = mode === 'addon'
-      ? 'Чат не открывается, аддон сам выбирает группу, рейд или подземелье.'
-      : 'Без аддона: агент открывает чат клавишей Enter и печатает /p, /g, /w.';
+    $('#s-mode-hint').textContent = t(mode === 'addon' ? 'settings.mode_addon_hint' : 'settings.mode_chat_hint');
   }
 
   function renderHotkey() {
     const keys = String(S.form.addon_hotkey || '').split('+').filter(Boolean);
     for (const box of $$('[data-hotkey]')) {
       if (S.capturing) {
-        box.replaceChildren(h('span', { class: 'capturing pulse' }, 'Нажми сочетание клавиш… Esc отменит'));
+        box.replaceChildren(h('span', { class: 'capturing pulse' }, t('hotkey.capturing')));
       } else {
         box.replaceChildren(...keys.flatMap((key, i) => [...(i ? [h('span', {}, '+')] : []), h('span', { class: 'key' }, keyLabel(key))]));
       }
@@ -608,9 +665,7 @@
     for (const button of $$('[data-capture]')) button.disabled = S.capturing;
     const changedKey = S.saved && S.form.addon_hotkey !== S.saved.addon_hotkey;
     for (const hint of $$('[data-hotkey-hint]')) {
-      hint.textContent = changedKey
-        ? `Поменяй клавишу и в игре: /vf key ${wowBinding(keys)}`
-        : 'Должна совпадать с клавишей, которую показывает /vf в игре. Аддон кладётся в папку Interface\\AddOns.';
+      hint.textContent = changedKey ? t('hotkey.changed', { binding: wowBinding(keys) }) : t('hotkey.hint');
     }
   }
 
@@ -622,7 +677,7 @@
         ...items.map((name) => h('span', { class: 'chip' }, name,
           h('button', {
             type: 'button',
-            'aria-label': `Убрать ${name}`,
+            'aria-label': t('chips.remove', { name }),
             onclick: () => {
               S.form[field] = S.form[field].filter((x) => x !== name);
               renderChips();
@@ -634,9 +689,9 @@
   }
 
   function chipAdder(field) {
-    const button = h('button', { class: 'addchip', type: 'button' }, '+ Добавить');
+    const button = h('button', { class: 'addchip', type: 'button' }, t('chips.add'));
     button.addEventListener('click', () => {
-      const input = h('input', { class: 'inp chipinput', type: 'text', spellcheck: 'false', 'aria-label': 'Новое значение' });
+      const input = h('input', { class: 'inp chipinput', type: 'text', spellcheck: 'false', 'aria-label': t('chips.new') });
       let done = false;
       const finish = (keep) => {
         if (done) return;
@@ -667,17 +722,17 @@
     note.hidden = false;
     note.className = 'note warn';
     let left = 5;
-    note.textContent = `Переключись в WoW. Запомню активное окно через ${left} с.`;
+    note.textContent = t('detect.countdown', { s: left });
     const timer = setInterval(() => {
       left = Math.max(1, left - 1);
-      note.textContent = `Переключись в WoW. Запомню активное окно через ${left} с.`;
+      note.textContent = t('detect.countdown', { s: left });
     }, 1000);
     const found = (await call('detect_game_window')) || { title: '', exe: '' };
     clearInterval(timer);
     button.disabled = false;
     if (!found.title && !found.exe) {
       note.className = 'note bad';
-      note.textContent = 'Активным осталось окно агента. Нажми ещё раз и успей переключиться в игру.';
+      note.textContent = t('detect.missed');
       return;
     }
     let added = false;
@@ -690,8 +745,8 @@
     renderChips();
     changed();
     note.className = 'note good';
-    note.textContent = `Нашёл «${found.title || 'без названия'}», процесс ${found.exe || 'неизвестен'}. `
-      + (added ? 'Добавил в списки, не забудь сохранить.' : 'Оба уже в списке.');
+    note.textContent = `${t('detect.found', { title: found.title || t('detect.untitled'), exe: found.exe || t('detect.unknown') })} `
+      + t(added ? 'detect.added' : 'detect.listed');
   }
 
   async function saveSettings() {
@@ -703,7 +758,7 @@
       if (first) (first.closest('.field') || first).scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
-    S.savedNote = result.reconnecting ? 'Сохранено. Переподключаюсь с новыми настройками…' : 'Сохранено в config.toml';
+    S.savedNote = t(result.reconnecting ? 'settings.saved_reconnecting' : 'settings.saved');
     renderDirty();
     clearTimeout(saveSettings.timer);
     saveSettings.timer = setTimeout(() => { S.savedNote = ''; renderDirty(); }, 6000);
@@ -715,13 +770,13 @@
     return S.padButtons.find((b) => b.name === name) || { name, xbox: name, playstation: name };
   }
 
+  // The button in a sentence: "right stick (RS)", but "A", "LB" and German nouns stay as they are.
+  const inSentence = (label) => (S.lang !== 'de' && /^\p{Lu}\p{Ll}/u.test(label) ? label[0].toLowerCase() + label.slice(1) : label);
+
   function padLabel(name) {
     const button = padButton(name);
     return S.pad.playstation ? button.playstation : button.xbox;
   }
-
-  // The button in a sentence: "правый стик (RS)", but "A" and "LB" stay as they are.
-  const inSentence = (label) => (/^[А-ЯЁ][а-яё]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label);
 
   async function loadMics() {
     const result = await call('list_mics');
@@ -760,10 +815,10 @@
 
     // microphone
     const names = S.mics || [];
-    const options = [h('option', { value: '' }, 'Микрофон Windows по умолчанию'),
+    const options = [h('option', { value: '' }, t('mic.default')),
       ...names.map((name) => h('option', { value: name }, name))];
     if (form.mic_device && !names.includes(form.mic_device)) {
-      options.push(h('option', { value: form.mic_device }, `${form.mic_device} (не подключён)`));
+      options.push(h('option', { value: form.mic_device }, t('mic.missing', { name: form.mic_device })));
     }
     for (const select of $$('[data-mic]')) {
       select.replaceChildren(...options.map((o) => o.cloneNode(true)));
@@ -771,13 +826,13 @@
       select.disabled = broken;
     }
     for (const button of $$('[data-mic-test]')) {
-      button.textContent = S.micTest ? 'Стоп' : 'Проверить';
+      button.textContent = t(S.micTest ? 'mic.stop' : 'mic.test');
       button.disabled = broken;
     }
-    const micHint = broken ? 'Микрофон не работает, пока агент не видит SDL3.dll.'
-      : S.micError ? `Микрофон: ${S.micError}`
-      : S.micTest ? 'Скажи что-нибудь: полоска должна доходить до середины.'
-      : 'Агент слушает микрофон только пока идёт запись.';
+    const micHint = broken ? t('mic.no_sdl')
+      : S.micError ? t('mic.error', { error: S.micError })
+      : S.micTest ? t('mic.testing')
+      : t('mic.idle');
     for (const hint of $$('[data-mic-hint]')) {
       hint.textContent = micHint;
       hint.classList.toggle('bad', broken || Boolean(S.micError));
@@ -788,15 +843,15 @@
     for (const info of $$('[data-pad-info]')) {
       if (S.padCapture) {
         info.replaceChildren(
-          h('span', { class: 'big pulse', role: 'status', style: 'font-size: 17px' }, 'Нажми кнопку на геймпаде…'),
-          h('span', { class: 'hint' }, 'Esc отменит.'));
+          h('span', { class: 'big pulse', role: 'status', style: 'font-size: 17px' }, t('pad.press')),
+          h('span', { class: 'hint' }, t('pad.press_esc')));
         continue;
       }
       const color = broken ? 'var(--bad)' : S.pad.connected ? 'var(--ok)' : 'var(--off)';
-      const line = broken ? `Геймпад не работает: ${S.pad.error}`
-        : S.padNote ? S.padNote
-        : S.pad.connected ? `${S.pad.name} подключён`
-        : 'Геймпад не найден. Подключи его, агент заметит сам.';
+      const line = broken ? t('pad.broken', { error: S.pad.error })
+        : S.padNote ? t(S.padNote)
+        : S.pad.connected ? t('pad.connected', { name: S.pad.name })
+        : t('pad.none');
       info.replaceChildren(
         h('span', { class: 'big' }, padLabel(form.ptt_button)),
         h('span', { class: 'hint row', style: 'gap: 6px' },
@@ -810,16 +865,14 @@
       button.classList.toggle('sel', on);
       button.setAttribute('aria-pressed', String(on));
     }
-    const modeHint = form.ptt_mode === 'hold'
-      ? 'Говоришь, пока держишь кнопку. Отпустил, и текст уходит в чат.'
-      : `Нажми, говори, нажми ещё раз, и текст уйдёт в чат. Не дольше ${form.max_record_s} с.`;
+    const modeHint = form.ptt_mode === 'hold' ? t('ptt.hold_hint') : t('ptt.toggle_hint', { s: form.max_record_s });
     for (const hint of $$('[data-pttmode-hint]')) hint.textContent = modeHint;
 
     // what the game does with the same button
-    const warning = !addon ? 'Без аддона игра тоже получит это нажатие. Выбери кнопку, на которой в игре ничего нет.'
-      : form.ptt_button === 'rightstick' ? 'В WoW Forever правый стик ставит метки. Аддон заберёт эту кнопку себе, метки можно перенести на другую в настройках управления игры.'
-      : form.ptt_button === 'misc1' ? 'Кнопку Share агент видит через GameInput: после смены кнопки перезапусти агент. Игра её, скорее всего, не видит, и значка записи в игре может не быть.'
-      : 'Аддон заберёт эту кнопку у игры, пока он включён. Что на ней было, покажет проверка в игре.';
+    const warning = t(!addon ? 'ptt.warn_chat'
+      : form.ptt_button === 'rightstick' ? 'ptt.warn_rightstick'
+      : form.ptt_button === 'misc1' ? 'ptt.warn_share'
+      : 'ptt.warn_other');
     for (const note of $$('[data-ptt-warn]')) {
       note.hidden = S.padCapture;
       note.replaceChildren(icon('warn'), h('span', {}, warning));
@@ -844,7 +897,7 @@
         changed();
       }
     } else if (!cancelled) {
-      S.padNote = 'Не дождался нажатия. Нажми «Назначить» ещё раз.';
+      S.padNote = 'pad.no_press'; // a key, so it follows a language change
     }
     renderVoice();
   }
@@ -861,9 +914,9 @@
     if (rec.state === 'recording') {
       const up = Math.max(0, Math.floor(Date.now() / 1000 - (rec.started_at || Date.now() / 1000)));
       return h('span', { class: 'rec on', role: 'status' }, h('span', { class: 'redled pulse' }),
-        `Запись ${Math.floor(up / 60)}:${String(up % 60).padStart(2, '0')}`);
+        t('rec.recording', { time: `${Math.floor(up / 60)}:${String(up % 60).padStart(2, '0')}` }));
     }
-    if (rec.state === 'processing') return h('span', { class: 'rec busy pulse', role: 'status' }, 'Распознаю…');
+    if (rec.state === 'processing') return h('span', { class: 'rec busy pulse', role: 'status' }, t('rec.processing'));
     return null;
   }
 
@@ -878,12 +931,12 @@
     $('#st-voice').hidden = !on;
     if (!on) return;
     $('#st-pad-label').textContent = padLabel(saved.ptt_button);
-    const mode = saved.ptt_mode === 'hold' ? 'удерживать' : 'нажал и нажал';
-    const mic = saved.mic_device || 'микрофон по умолчанию';
-    $('#st-pad-hint').textContent = S.pad.error ? `Не работает: ${S.pad.error}` : `${mic} · ${mode}`;
-    const pill = recordingPill() || (S.pad.error ? h('span', { class: 'pill', style: 'color: var(--bad); border-color: var(--bad)' }, 'выключено')
-      : S.pad.connected ? h('span', { class: 'pill', style: 'color: var(--muted); border-color: var(--bronze)' }, 'готов')
-      : h('span', { class: 'pill', style: 'color: var(--off); border-color: var(--off)' }, 'нет геймпада'));
+    const mode = t(saved.ptt_mode === 'hold' ? 'ptt.hold_short' : 'ptt.toggle_short');
+    const mic = saved.mic_device || t('mic.default_short');
+    $('#st-pad-hint').textContent = S.pad.error ? t('pad.off_reason', { error: S.pad.error }) : `${mic} · ${mode}`;
+    const pill = recordingPill() || (S.pad.error ? h('span', { class: 'pill', style: 'color: var(--bad); border-color: var(--bad)' }, t('pad.pill_off'))
+      : S.pad.connected ? h('span', { class: 'pill', style: 'color: var(--muted); border-color: var(--bronze)' }, t('pad.pill_ready'))
+      : h('span', { class: 'pill', style: 'color: var(--off); border-color: var(--off)' }, t('pad.pill_none')));
     $('#st-rec').replaceChildren(pill);
     $('#st-level').hidden = S.recording.state !== 'recording';
   }
@@ -893,10 +946,9 @@
     if (!S.form) return;
     const say = $('#w-voice-say');
     const label = h('b', { style: 'color: var(--gold)' }, inSentence(padLabel(S.form.ptt_button)));
-    if (S.pad.error) say.replaceChildren(`Геймпад не работает: ${S.pad.error}`);
-    else if (!S.pad.connected) say.replaceChildren('Подключи геймпад, чтобы проверить голос.');
-    else if (S.form.ptt_mode === 'hold') say.replaceChildren('Зажми ', label, ', скажи «Всем привет» и отпусти.');
-    else say.replaceChildren('Нажми ', label, ', скажи «Всем привет», нажми ещё раз.');
+    if (S.pad.error) say.replaceChildren(t('pad.broken', { error: S.pad.error }));
+    else if (!S.pad.connected) say.replaceChildren(t('test.connect_pad'));
+    else say.replaceChildren(...tNodes(S.form.ptt_mode === 'hold' ? 'test.hold' : 'test.toggle', { button: label }));
     $('#w-voice-rec').replaceChildren(recordingPill() || '');
     const box = $('#w-voice-result');
     const v = S.wizardVoice;
@@ -907,7 +959,7 @@
     box.className = `note ${kind} top`;
     box.replaceChildren(icon(view.mark === 'wait' ? 'warn' : view.mark),
       h('div', { class: 'field', style: 'gap: 2px' }, view.line, view.note,
-        v.status === 'ok' ? h('span', { class: 'mdetail' }, 'Ушло в чат игры.') : null));
+        v.status === 'ok' ? h('span', { class: 'mdetail' }, t('test.sent')) : null));
   }
 
   // ------------------------------------------------------------------ in-game check of the button
@@ -942,13 +994,10 @@
   function bindRows() {
     const c = S.bind.check;
     const label = inSentence(padLabel((S.saved || S.form).ptt_button));
-    const rows = [
-      { text: 'Игра запущена', now: 'Жду Wow.exe. Войди персонажем.' },
-      { text: 'Окно WoW активно', now: 'Переключись в игру, остальное агент сделает сам.' },
-      { text: 'Кнопка передана аддону', now: `Аддон просит нажать кнопку: нажми ${label}.` },
-      { text: 'Аддон перезагрузил интерфейс', now: 'Экран игры мигнёт, это /reload.' },
-      { text: 'Кнопка в игре', now: '' },
-    ];
+    const rows = ['game', 'focus', 'sent', 'reload', 'done'].map((step) => ({
+      text: t(`bind.row_${step}`),
+      now: step === 'done' ? '' : t(`bind.row_${step}_now`, { button: label }),
+    }));
     const at = !c ? -1 : c.step === 'error' ? S.bind.last : BIND_STEPS.indexOf(c.step);
     return rows.map((row, i) => {
       let mark = 'todo';
@@ -958,10 +1007,10 @@
         mark = 'ok';
         if (i === 4 && c.previous) {
           mark = 'warn';
-          text = `Кнопка была на «${c.previous_name || c.previous}»`;
-          detail = 'Аддон забрал её, пока он включён. Это действие можно перенести на другую кнопку в настройках управления игры.';
+          text = t('bind.was_on', { name: c.previous_name || c.previous });
+          detail = t('bind.was_on_detail');
         } else if (i === 4) {
-          text = 'Кнопка была свободна, аддон взял её себе';
+          text = t('bind.was_free');
         }
       } else if (i < at) mark = 'ok';
       else if (i === at) {
@@ -980,17 +1029,15 @@
     const label = inSentence(padLabel((S.saved || S.form).ptt_button));
     switch (c.error) {
       case 'addon_missing':
-        return ['Аддон не ответил', 'Проверь, что VoiceForever включён в списке модификаций, и нажми «Проверить ещё раз».'];
-      case 'wrong_button':
-        return ['Нажата другая кнопка', `${c.detail[0].toUpperCase()}${c.detail.slice(1)}. Проверь ещё раз и в игре нажми ${label}.`];
       case 'no_game_folder':
-        return ['Не нашёл папку игры', 'Аддон всё равно взял кнопку: что на ней было, он написал в чат игры.'];
       case 'chat_mode':
-        return ['Нужен аддон', 'Проверка работает только в режиме с аддоном.'];
+        return [t(`bind.err_${c.error}`), t(`bind.err_${c.error}_hint`)];
+      case 'wrong_button':
+        return [t('bind.err_wrong_button'), t('bind.err_wrong_button_hint', { detail: cap(c.detail), button: label })];
       case 'not_connected':
-        return ['Сначала сохрани настройки', ''];
+        return [t('bind.err_not_connected'), ''];
       default:
-        return ['Проверка не закончилась', c.detail ? `${c.detail[0].toUpperCase()}${c.detail.slice(1)}.` : ''];
+        return [t('bind.err_other'), c.detail ? `${cap(c.detail)}.` : ''];
     }
   }
 
@@ -1015,21 +1062,17 @@
     for (const actions of $$('[data-bind-actions]')) {
       actions.hidden = !addon;
       const run = h('button', { class: 'btn', type: 'button', disabled: running, onclick: startBindCheck },
-        running ? 'Проверяю…' : c ? 'Проверить ещё раз' : 'Проверить в игре');
-      const cancel = h('button', { class: 'link', type: 'button', style: 'align-self: center', onclick: () => call('cancel_game_binding') }, 'Отменить');
+        t(running ? 'bind.running' : c ? 'bind.again' : 'bind.open'));
+      const cancel = h('button', { class: 'link', type: 'button', style: 'align-self: center', onclick: () => call('cancel_game_binding') }, t('common.cancel'));
       actions.replaceChildren(...(running ? [run, cancel] : [run]));
     }
-    $('#w-bind-intro').textContent = addon
-      ? 'Запусти WoW и войди персонажем. Агент передаст кнопку аддону, аддон проверит бинды и перезагрузит интерфейс.'
-      : 'Без аддона проверять нечего: нажатие получит и игра. Убедись, что на этой кнопке в игре ничего нет.';
+    $('#w-bind-intro').textContent = t(addon ? 'bind.intro_addon' : 'bind.intro_chat');
 
     const line = $('#s-bind-line');
-    if (!addon) line.textContent = 'Без аддона игра тоже видит эту кнопку.';
+    if (!addon) line.textContent = t('bind.line_chat');
     else if (c && c.step === 'done') {
-      line.textContent = c.previous
-        ? `В игре кнопку держит аддон. Раньше на ней было «${c.previous_name || c.previous}».`
-        : 'В игре кнопку держит аддон, она была свободна.';
-    } else line.textContent = 'В игре кнопку забирает аддон. Проверь, что на ней было.';
+      line.textContent = c.previous ? t('bind.line_taken', { name: c.previous_name || c.previous }) : t('bind.line_free');
+    } else line.textContent = t('bind.line_unchecked');
     $('#s-bind-open').hidden = !addon || !$('#s-bind-box').hidden;
   }
 
@@ -1037,6 +1080,8 @@
   function bindControls() {
     $('#btn-minimize').addEventListener('click', () => call('minimize'));
     $('#btn-close').addEventListener('click', () => call('close'));
+    $('#lang-pick').addEventListener('change', (e) => switchLanguage(e.target.value));
+    $('#s-lang').addEventListener('change', (e) => switchLanguage(e.target.value));
     for (const tab of $$('.tab')) {
       tab.addEventListener('click', () => {
         showView(tab.dataset.tab);
@@ -1060,7 +1105,7 @@
         const input = $(`#${button.dataset.reveal}`);
         const show = input.type === 'password';
         input.type = show ? 'text' : 'password';
-        button.textContent = show ? 'Скрыть' : 'Показать';
+        button.textContent = t(show ? 'common.hide' : 'common.show');
       });
     }
     for (const range of $$('[data-range]')) {
@@ -1151,8 +1196,8 @@
     });
 
     $('#st-test').addEventListener('click', () => runTest($('#st-test'),
-      (left) => { $('#st-test-hint').textContent = `Жду окно WoW: осталось ${left} с`; },
-      () => { $('#st-test-hint').textContent = TEST_HINT; }));
+      (left) => { $('#st-test-hint').textContent = t('status.test_wait', { s: left }); },
+      () => { $('#st-test-hint').textContent = t('status.test_hint'); }));
     $('#btn-log').addEventListener('click', () => call('open_log'));
 
     $('#s-detect').addEventListener('click', detectGame);

@@ -5,6 +5,7 @@ the tray has its own; page events are pushed by one more, so a slow page never s
 connection.
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -15,8 +16,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .. import i18n
 from ..client import ConnState, RecState, Recording, Status
-from ..config import AgentConfig, load_draft
+from ..config import AgentConfig, load_draft, peek_language
 from ..controller import Controller
 from . import winapi
 from .api import Api, event_json
@@ -37,14 +39,11 @@ TRAY_DOT: frozendict[ConnState, str] = frozendict({
     ConnState.AUTH_FAILED: "error",
     ConnState.REPLACED: "disconnected",
 })
-TRAY_TIP: frozendict[ConnState, str] = frozendict({
-    ConnState.CONNECTED: "на связи",
-    ConnState.CONNECTING: "подключение…",
-    ConnState.RECONNECTING: "связь потеряна, переподключаюсь",
-    ConnState.DISCONNECTED: "отключено",
-    ConnState.AUTH_FAILED: "сервер не принял токен",
-    ConnState.REPLACED: "агент подключён на другом ПК",
-})
+
+
+def tray_tip(state: ConnState | str) -> str:
+    """The icon's tooltip: tray.<connection state>, or tray.recording."""
+    return f"VoiceForever: {i18n.t(f'tray.{state}')}"
 
 
 def make_backend(config: AgentConfig) -> Any:
@@ -60,6 +59,7 @@ class App:
         self.config_path = config_path
         self.log_path = log_path
         self.instance = instance
+        i18n.set_language(peek_language(config_path))  # problems in the file are reported in it
         self.config, self.draft, self.errors = load_draft(config_path)
         self.controller = Controller(make_backend, self._on_event, make_devices=self._make_devices)
         self.window: Any = None
@@ -134,6 +134,30 @@ class App:
         self._sync_autostart(config)
         return self.controller.configure(config)
 
+    def set_language(self, setting: str) -> None:
+        """The page switched languages: use it here too and keep it in config.toml."""
+        i18n.set_language(setting)
+        self.draft["language"] = setting
+        if self.config is not None and self.config.language != setting:
+            config = dataclasses.replace(self.config, language=setting)
+            try:
+                config.save(self.config_path)
+            except OSError:
+                log.exception("could not save the language")
+            self.config, self.draft = config, config.to_dict()
+            self.controller.configure(config)
+        if self.tray is not None:
+            self.tray.set_state(
+                "recording" if self._recording else TRAY_DOT[self._last_state],
+                tray_tip("recording" if self._recording else self._last_state),
+            )
+
+    def file_errors(self) -> dict[str, str]:
+        """A problem with config.toml itself (not with one setting), in the current language."""
+        if "file" not in self.errors:
+            return {}
+        return {k: v for k, v in load_draft(self.config_path)[2].items() if k == "file"}
+
     def detect_window(self) -> dict[str, str]:
         from ..winio import foreground_window
 
@@ -172,10 +196,7 @@ class App:
         self._set_visible(False)
         if not self._told_about_tray and self.tray is not None:
             self._told_about_tray = True
-            self.tray.notify(
-                "VoiceForever работает в трее",
-                "Агент остаётся на связи. Окно открывается щелчком по значку.",
-            )
+            self.tray.notify(i18n.t("tray.hidden_title"), i18n.t("tray.hidden"))
 
     def _set_visible(self, visible: bool) -> None:
         self.visible = visible
@@ -208,7 +229,7 @@ class App:
         state = status.state
         if self.tray is not None:
             if not self._recording:
-                self.tray.set_state(TRAY_DOT[state], f"VoiceForever: {TRAY_TIP[state]}")
+                self.tray.set_state(TRAY_DOT[state], tray_tip(state))
             if not self.visible:
                 self._notify(state, status.detail)
         if state is ConnState.CONNECTED:
@@ -222,38 +243,35 @@ class App:
         if not changed or self.tray is None:
             return
         if recording_now:
-            self.tray.set_state("recording", "VoiceForever: идёт запись")
+            self.tray.set_state("recording", tray_tip("recording"))
         else:
             state = self._last_state
-            self.tray.set_state(TRAY_DOT[state], f"VoiceForever: {TRAY_TIP[state]}")
+            self.tray.set_state(TRAY_DOT[state], tray_tip(state))
 
     def _notify(self, state: ConnState, detail: str) -> None:
         assert self.tray is not None
         match state:
             case ConnState.RECONNECTING if self._last_state is ConnState.CONNECTED:
                 self._told_lost = True
-                self.tray.notify("Связь с сервером потеряна", f"Переподключаюсь сам. Причина: {detail}.", warning=True)
+                self.tray.notify(i18n.t("tray.lost_title"), i18n.t("tray.lost", detail=detail), warning=True)
             case ConnState.CONNECTED if self._told_lost:
-                self.tray.notify("Связь восстановлена", "Сообщения снова уходят в игру.")
+                self.tray.notify(i18n.t("tray.back_title"), i18n.t("tray.back"))
             case ConnState.AUTH_FAILED:
-                self.tray.notify("Сервер не принял токен", "Открой окно агента и проверь токен в настройках.", warning=True)
+                self.tray.notify(i18n.t("tray.auth_title"), i18n.t("tray.auth"), warning=True)
             case ConnState.REPLACED:
-                self.tray.notify(
-                    "Агент подключён на другом ПК",
-                    "Этот агент отключился. Подключить его снова можно из окна или меню значка.",
-                    warning=True,
-                )
+                self.tray.notify(i18n.t("tray.replaced_title"), i18n.t("tray.replaced_text"), warning=True)
 
     # ------------------------------------------------------------ tray
     def _tray_menu(self) -> list[MenuItem]:
-        items: list[MenuItem] = [("Открыть VoiceForever", self.show), None]
+        t = i18n.t
+        items: list[MenuItem] = [(t("tray.open"), self.show), None]
         if self.config is not None:
             if self.controller.running:
-                items += [("Отключить", self.controller.disconnect), ("Переподключить", self.controller.reconnect)]
+                items += [(t("action.disconnect"), self.controller.disconnect), (t("action.reconnect"), self.controller.reconnect)]
             else:
-                items.append(("Подключить", self.controller.connect))
-            items += [("Тест в /say", self.controller.send_test), None]
-        items.append(("Выход", self.quit))
+                items.append((t("action.connect"), self.controller.connect))
+            items += [(t("status.test"), self.controller.send_test), None]
+        items.append((t("tray.quit"), self.quit))
         return items
 
     def _sync_autostart(self, config: AgentConfig) -> None:
@@ -269,21 +287,14 @@ def run(config_path: Path, log_path: Path, start_hidden: bool = False) -> int:
         log.info("the agent is already running: showing its window")
         instance.show_running()
         return 0
+    i18n.set_language(peek_language(config_path))
     try:
         from webview.platforms import winforms  # loads .NET and looks for WebView2
     except Exception:
         log.exception("the window could not start")
-        winapi.message_box(
-            "Окно агента не запустилось: не загрузился .NET Framework.\n\n"
-            f"Подробности в журнале:\n{log_path}\n\n"
-            "Без окна агент работает так: VoiceForeverAgent.exe --headless"
-        )
+        winapi.message_box(i18n.t("dialog.no_dotnet", log=log_path))
         return 1
     if not getattr(winforms, "is_chromium", True):
-        winapi.message_box(
-            "Для окна агента нужен Microsoft Edge WebView2 Runtime. "
-            f"В Windows 11 он уже есть, для Windows 10 его можно скачать здесь:\n{WEBVIEW2_URL}\n\n"
-            "Без окна агент работает так: VoiceForeverAgent.exe --headless"
-        )
+        winapi.message_box(i18n.t("dialog.no_webview2", url=WEBVIEW2_URL))
         return 1
     return App(config_path, log_path, start_hidden, instance).run()

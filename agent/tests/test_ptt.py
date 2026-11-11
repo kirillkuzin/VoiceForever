@@ -2,6 +2,7 @@
 
 import pytest
 
+from vf_agent import i18n
 from vf_agent.config import AgentConfig, ConfigError, render
 from vf_agent.ptt import BY_NAME, BY_SDL, MIN_RECORD_S, PAD_BUTTONS, Cmd, PttMachine, PttMode, button_label
 
@@ -61,9 +62,13 @@ def test_button_tables():
     assert len(BY_NAME) == len(BY_SDL) == len(PAD_BUTTONS)
     assert 5 not in BY_SDL  # Guide / PS button belongs to Windows and Steam
     assert BY_NAME["rightstick"].sdl == 8
-    assert button_label("rightstick") == "Правый стик (RS)"
-    assert button_label("rightstick", playstation=True) == "Правый стик (R3)"
+    assert button_label("rightstick") == "Right stick (RS)"
+    assert button_label("rightstick", playstation=True) == "Right stick (R3)"
     assert button_label("back", playstation=True) == "Create"
+    assert button_label("touchpad", playstation=True) == "Touchpad"  # no own DualSense name: the shared one
+    i18n.set_language("ru")
+    assert button_label("rightstick") == "Правый стик (RS)"
+    assert button_label("a", playstation=True) == "Крест"
 
 
 def test_ptt_settings_defaults_and_validation():
