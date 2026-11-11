@@ -11,7 +11,7 @@ import time
 from collections.abc import Iterable
 from ctypes import wintypes
 
-from .plan import Action, Kind
+from .plan import KEY_CODES, Action, GameState, Kind, parse_combo
 
 if sys.platform != "win32":  # pragma: no cover - imported only on Windows
     raise ImportError("winio works only on Windows")
@@ -68,6 +68,11 @@ user32.SendInput.restype = wintypes.UINT
 user32.MapVirtualKeyW.argtypes = (wintypes.UINT, wintypes.UINT)
 user32.MapVirtualKeyW.restype = wintypes.UINT
 user32.GetForegroundWindow.restype = wintypes.HWND
+WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+user32.EnumWindows.argtypes = (WNDENUMPROC, wintypes.LPARAM)
+user32.EnumWindows.restype = wintypes.BOOL
+user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+user32.IsWindowVisible.restype = wintypes.BOOL
 user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)
 user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
 user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
@@ -98,17 +103,6 @@ kernel32.QueryFullProcessImageNameW.argtypes = (
 )
 kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
 
-VK: frozendict[str, int] = frozendict({
-    "ctrl": 0x11, "control": 0x11, "shift": 0x10, "alt": 0x12,
-    "enter": 0x0D, "return": 0x0D, "escape": 0x1B, "esc": 0x1B, "tab": 0x09,
-    "space": 0x20, "backspace": 0x08,
-    "home": 0x24, "end": 0x23, "insert": 0x2D, "delete": 0x2E,
-    "pageup": 0x21, "pagedown": 0x22,
-    **{f"f{i}": 0x70 + i - 1 for i in range(1, 25)},
-    **{chr(c).lower(): c for c in range(ord("A"), ord("Z") + 1)},
-    **{str(d): 0x30 + d for d in range(10)},
-    **{f"num{d}": 0x60 + d for d in range(10)},
-})
 EXTENDED = frozenset({0x24, 0x23, 0x2D, 0x2E, 0x21, 0x22})
 
 
@@ -120,17 +114,9 @@ def _key_input(vk: int, up: bool) -> INPUT:
     return INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=vk, wScan=scan, dwFlags=flags))
 
 
-def parse_combo(combo: str) -> list[int]:
-    keys = [k.strip().lower() for k in combo.replace("-", "+").split("+") if k.strip()]
-    try:
-        return [VK[k] for k in keys]
-    except KeyError as e:
-        raise ValueError(f"unknown key {e.args[0]!r} in {combo!r}") from None
-
-
 def press(combo: str) -> None:
     """Press a key combination atomically (one SendInput call)."""
-    vks = parse_combo(combo)
+    vks = [KEY_CODES[k] for k in parse_combo(combo)]
     events = [_key_input(vk, False) for vk in vks] + [_key_input(vk, True) for vk in reversed(vks)]
     arr = (INPUT * len(events))(*events)
     sent = user32.SendInput(len(events), arr, ctypes.sizeof(INPUT))
@@ -183,27 +169,49 @@ def set_clipboard_text(text: str) -> None:
 
 
 # ------------------------------------------------------------------ window
+def _title(hwnd: int) -> str:
+    length = user32.GetWindowTextLengthW(hwnd)
+    buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
+    return buf.value
+
+
+def _exe_name(hwnd: int) -> str:
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not proc:
+        return ""
+    try:
+        size = wintypes.DWORD(1024)
+        path = ctypes.create_unicode_buffer(size.value)
+        if kernel32.QueryFullProcessImageNameW(proc, 0, path, ctypes.byref(size)):
+            return os.path.basename(path.value)
+        return ""
+    finally:
+        kernel32.CloseHandle(proc)
+
+
 def foreground_window() -> tuple[str, str]:
     """(window title, process exe name) of the active window."""
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
         return "", ""
-    length = user32.GetWindowTextLengthW(hwnd)
-    buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, buf, length + 1)
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    exe = ""
-    proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
-    if proc:
-        try:
-            size = wintypes.DWORD(1024)
-            path = ctypes.create_unicode_buffer(size.value)
-            if kernel32.QueryFullProcessImageNameW(proc, 0, path, ctypes.byref(size)):
-                exe = os.path.basename(path.value)
-        finally:
-            kernel32.CloseHandle(proc)
-    return buf.value, exe
+    return _title(hwnd), _exe_name(hwnd)
+
+
+def visible_windows() -> list[int]:
+    """Handles of visible top-level windows that have a title."""
+    found: list[int] = []
+
+    @WNDENUMPROC
+    def collect(hwnd: int, _: int) -> bool:
+        if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd):
+            found.append(hwnd)
+        return True
+
+    user32.EnumWindows(collect, 0)
+    return found
 
 
 class WindowsBackend:
@@ -214,11 +222,22 @@ class WindowsBackend:
         self.process_names = [p.lower() for p in process_names]
         self.key_delay = key_delay_ms / 1000
 
-    def is_game_focused(self) -> bool:
-        title, exe = foreground_window()
+    def _is_game(self, title: str, exe: str) -> bool:
         if exe and exe.lower() in self.process_names:
             return True
         return any(title.lower().startswith(t) for t in self.window_titles if t)
+
+    def is_game_focused(self) -> bool:
+        return self._is_game(*foreground_window())
+
+    def game_state(self) -> GameState:
+        foreground = user32.GetForegroundWindow()
+        if foreground and self._is_game(_title(foreground), _exe_name(foreground)):
+            return GameState.ACTIVE
+        for hwnd in visible_windows():
+            if hwnd != foreground and self._is_game(_title(hwnd), _exe_name(hwnd)):
+                return GameState.BACKGROUND
+        return GameState.CLOSED
 
     def run(self, actions: list[Action]) -> None:
         saved = get_clipboard_text()

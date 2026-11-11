@@ -42,15 +42,28 @@ jobs:
       - name: Run tests
         run: uv run --locked pytest -q
       - name: Build exe
-        run: uv run --locked pyinstaller --onefile --console --name VoiceForeverAgent run_agent.py
+        run: |
+          uv run --locked python -m vf_agent.gui.icons build\VoiceForever.ico
+          uv run --locked pyinstaller --noconfirm --onefile --windowed --name VoiceForeverAgent `
+            --icon build\VoiceForever.ico --add-data "vf_agent\ui;vf_agent\ui" run_agent.py
       - name: Smoke test the exe
         run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          $exe = ".\dist\VoiceForeverAgent.exe"
-          $cfg = Join-Path $env:RUNNER_TEMP "vf-config.toml"
-          # 1. No config yet: the exe writes a template and exits with 1.
-          "" | & $exe --config $cfg
-          if ($LASTEXITCODE -ne 1 -or -not (Test-Path $cfg)) { throw "template was not created" }
+          # The exe is a window app: Start-Process waits for it, and the checks read agent.log,
+          # which the agent writes next to its config.toml.
+          $exe = (Resolve-Path .\dist\VoiceForeverAgent.exe).Path
+          $dir = Join-Path $env:RUNNER_TEMP "vf"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $cfg = Join-Path $dir "config.toml"
+          $log = Join-Path $dir "agent.log"
+          function Invoke-Agent([string]$arguments, [int]$seconds = 60) {
+            $p = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru
+            $null = $p.Handle  # keeps ExitCode available after the process ends
+            if (-not $p.WaitForExit($seconds * 1000)) { taskkill /PID $p.Id /T /F | Out-Null; throw "timed out: $arguments" }
+            return $p.ExitCode
+          }
+          # 1. No config yet, no window: the exe writes a template and exits with 1.
+          $code = Invoke-Agent "--headless --config `"$cfg`""
+          if ($code -ne 1 -or -not (Test-Path $cfg)) { throw "template was not created (exit $code)" }
           # 2. Valid config, --test: loads the Windows input backend and, since WoW is
           #    not in front, gives up after focus_wait_s without typing anything.
           @"
@@ -58,9 +71,20 @@ jobs:
           token = "smoke-test-token-0123456789"
           focus_wait_s = 1
           "@ | Set-Content -Encoding utf8 $cfg
-          $out = "" | & $exe --config $cfg --test | Out-String
-          Write-Output $out
-          if ($LASTEXITCODE -ne 0 -or $out -notmatch "not_focused") { throw "unexpected --test result" }
+          $code = Invoke-Agent "--test --config `"$cfg`""
+          Get-Content $log
+          if ($code -ne 0 -or -not (Select-String -Path $log -Pattern "not_focused" -Quiet)) { throw "unexpected --test result (exit $code)" }
+          # 3. The window: WebView2 loads the page and the page reads the agent state.
+          $p = Start-Process -FilePath $exe -ArgumentList "--config `"$cfg`"" -PassThru
+          $ready = $false
+          for ($i = 0; $i -lt 60 -and -not $ready; $i++) {
+            Start-Sleep -Seconds 1
+            $ready = Select-String -Path $log -Pattern "window is ready" -Quiet
+            if ($p.HasExited) { break }
+          }
+          taskkill /PID $p.Id /T /F | Out-Null
+          Get-Content $log -Tail 30
+          if (-not $ready) { throw "the agent window did not load" }
       - uses: actions/upload-artifact@v7
         with:
           name: VoiceForeverAgent
