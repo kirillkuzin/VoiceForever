@@ -35,7 +35,7 @@ class Settings:
     stt_base_url: str = "https://api.openai.com/v1"
     stt_api_key: str = ""
     stt_model: str = "gpt-4o-mini-transcribe"
-    stt_language: str = "ru"
+    stt_language: str = ""  # "" = the model detects the spoken language
     stt_prompt: str = ""
 
     # LLM router (Claude). The SDK reads ANTHROPIC_API_KEY itself.
