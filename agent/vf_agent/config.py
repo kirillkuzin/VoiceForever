@@ -62,7 +62,7 @@ class AgentConfig:
     autostart: bool = False
     language: str = ""  # "" = the Windows display language, or one of i18n.LANGUAGES
     ptt_enabled: bool = True
-    ptt_button: str = "leftstick"
+    ptt_button: str = "rightstick"
     ptt_mode: PttMode = PttMode.TOGGLE
     mic_device: str = ""  # "" = the Windows default microphone
     max_record_s: float = 30
@@ -194,7 +194,7 @@ COMMENTS: frozendict[str, str] = frozendict({
     "language": 'Window language: "" = as in Windows, or ' + ", ".join(LANGUAGES),
     "ptt_enabled": (
         "Push-to-talk: record your voice with a gamepad button and send it to the server\n"
-        'ptt_button: leftstick, rightstick, misc1 (Xbox Share), back (View), a, b, x, y, dpup, ...\n'
+        'ptt_button: rightstick, leftstick, misc1 (Xbox Share), back (View), a, b, x, y, dpup, ...\n'
         'ptt_mode: "toggle" = press to start, press again to send; "hold" = hold while talking'
     ),
     "mic_device": 'Microphone name as Windows shows it; "" = the default microphone',

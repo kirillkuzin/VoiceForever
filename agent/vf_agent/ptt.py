@@ -41,8 +41,8 @@ class PadButton:
 
 # The Guide / PS button is left out: Windows and Steam use it. Names: padbtn.* in ui/locales.
 PAD_BUTTONS: tuple[PadButton, ...] = (
-    PadButton("leftstick", 7),
     PadButton("rightstick", 8),
+    PadButton("leftstick", 7),
     PadButton("misc1", 15),
     PadButton("back", 4),
     PadButton("start", 6),

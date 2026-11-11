@@ -73,7 +73,7 @@ def test_button_tables():
 
 def test_ptt_settings_defaults_and_validation():
     cfg = AgentConfig.from_dict({"server_url": "wss://vf.example.com/ws", "token": TOKEN})
-    assert (cfg.ptt_enabled, cfg.ptt_button, cfg.ptt_mode, cfg.mic_device) == (True, "leftstick", PttMode.TOGGLE, "")
+    assert (cfg.ptt_enabled, cfg.ptt_button, cfg.ptt_mode, cfg.mic_device) == (True, "rightstick", PttMode.TOGGLE, "")
     cfg = AgentConfig.from_dict({
         "server_url": "wss://vf.example.com/ws", "token": TOKEN,
         "ptt_button": " RightStick ", "ptt_mode": "hold", "mic_device": " Headset Mic ", "max_record_s": 45,
