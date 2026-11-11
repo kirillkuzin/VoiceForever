@@ -1,0 +1,30 @@
+[project]
+name = "voiceforever-server"
+version = "0.2.0"
+description = "Telegram voice messages -> speech-to-text -> Claude channel routing -> WoW chat via a desktop agent"
+requires-python = ">=3.15"
+license = "MIT"
+dependencies = [
+    "aiogram>=3.31",
+    "aiohttp>=3.14.5",
+    "anthropic>=2.8",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.2", "pytest-asyncio>=1.4"]
+
+[project.scripts]
+voiceforever-server = "vf_server.main:main"
+
+[build-system]
+requires = ["setuptools>=84"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["vf_server"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]

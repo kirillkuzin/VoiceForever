@@ -1,0 +1,14 @@
+services:
+  voiceforever:
+    build: ./server
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - vf-data:/data
+    # The agent connects over WebSocket. Put a TLS reverse proxy (Caddy, nginx, Traefik)
+    # in front and expose wss://your-domain/ws; do not expose 8765 to the internet directly.
+    ports:
+      - "127.0.0.1:8765:8765"
+
+volumes:
+  vf-data:
