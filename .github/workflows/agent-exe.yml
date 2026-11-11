@@ -1,11 +1,12 @@
 name: Agent exe
 
 # Tests the agent and builds VoiceForeverAgent.exe on Windows.
-# Pull requests and main: the exe is an artifact of the run (for testing).
-# Tags v*: a GitHub Release with the exe, the addon zip and SHA256 checksums.
+# Pull requests and master: the exe is an artifact of the run (for testing).
+# Tags v* (pushed, or created by publishing a release on GitHub): the release gets
+# the exe, the addon zip and SHA256 checksums.
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ["v*"]
     paths:
       - "agent/**"
@@ -17,6 +18,8 @@ on:
       - "server/vf_server/hub.py"
       - "server/vf_server/chat.py"
       - ".github/workflows/agent-exe.yml"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:

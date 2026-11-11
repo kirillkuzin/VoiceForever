@@ -8,7 +8,7 @@ ghcr.io/kirillkuzin/voiceforever-server
 
 | Тег | Что это |
 |---|---|
-| `latest` | последняя версия из ветки `main` |
+| `latest` | последняя версия из ветки `master` |
 | `0.2.0`, `0.2` | релизы по тегам `v*` |
 | `sha-<коммит>` | конкретный коммит |
 
@@ -28,8 +28,8 @@ ghcr.io/kirillkuzin/voiceforever-server
 
 ```
 mkdir -p ~/voiceforever && cd ~/voiceforever
-curl -fsSLO https://raw.githubusercontent.com/kirillkuzin/VoiceForever/main/docker-compose.yml
-curl -fsSL -o .env https://raw.githubusercontent.com/kirillkuzin/VoiceForever/main/.env.example
+curl -fsSLO https://raw.githubusercontent.com/kirillkuzin/VoiceForever/master/docker-compose.yml
+curl -fsSL -o .env https://raw.githubusercontent.com/kirillkuzin/VoiceForever/master/.env.example
 ```
 
 Пока репозиторий приватный, `curl` получит 404. Тогда сделай `git clone` (GitHub попросит войти) и работай в папке репозитория.
