@@ -26,30 +26,19 @@ Telegram (голосовое) → сервер на VPS: распознаван�
 
 ## Установка
 
-```
-git clone https://github.com/kirillkuzin/VoiceForever.git
-```
+Готовые сборки:
 
-Репозиторий нужен и на VPS (сервер), и на игровом ПК (аддон и агент).
+- сервер: Docker-образ `ghcr.io/kirillkuzin/voiceforever-server`;
+- агент и аддон: `VoiceForeverAgent.exe` и `VoiceForever-addon-<версия>.zip` на странице [Releases](https://github.com/kirillkuzin/VoiceForever/releases).
 
 ### 1. Сервер (VPS)
 
-1. Создай бота у [@BotFather](https://t.me/BotFather) и возьми токен.
-2. Сгенерируй токен агента: `python3 -c "import secrets;print(secrets.token_urlsafe(32))"`.
-3. `cp .env.example .env` и заполни:
-   - `VF_TELEGRAM_TOKEN` — токен бота;
-   - `VF_USERS` — `<твой Telegram ID>:<токен агента>` (ID бот покажет на `/start`);
-   - `VF_STT_API_KEY` — ключ API распознавания (по умолчанию OpenAI `gpt-4o-mini-transcribe`);
-   - `ANTHROPIC_API_KEY` — ключ Claude.
-4. `docker compose up -d --build` (образ на `python:3.15-slim`, версии библиотек зафиксированы в `server/uv.lock`).
-   Без Docker: `cd server && uv sync && uv run voiceforever-server`.
-5. Агент подключается по WebSocket. Поставь перед ним TLS, например Caddy:
-   ```
-   vf.example.com {
-       reverse_proxy /ws 127.0.0.1:8765
-   }
-   ```
-   Адрес для агента: `wss://vf.example.com/ws`.
+Пошагово, включая свой Whisper и TLS: [docs/server.md](docs/server.md). Коротко:
+
+1. Скачай `docker-compose.yml` и `.env.example` (как `.env`).
+2. Заполни в `.env` токен бота от [@BotFather](https://t.me/BotFather), `VF_USERS` (`<Telegram ID>:<токен агента>`), ключ Claude и распознавание речи.
+3. `docker compose pull && docker compose up -d`.
+4. Поставь перед сервером TLS (например Caddy) и дай агенту адрес `wss://<домен>/ws`.
 
 ### 2. Аддон
 
@@ -59,12 +48,11 @@ git clone https://github.com/kirillkuzin/VoiceForever.git
 
 ### 3. Агент (Windows 10 или 11, 64 бит)
 
-Нужен [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`). Он сам скачает Python 3.15 и точные версии библиотек из `agent/uv.lock`.
+Скачай `VoiceForeverAgent.exe` со страницы [Releases](https://github.com/kirillkuzin/VoiceForever/releases) и запусти. Exe не подписан, поэтому Windows может показать SmartScreen: «Подробнее» → «Выполнить в любом случае». Контрольные суммы лежат в `SHA256SUMS.txt` рядом с exe.
 
-- Из исходников: `cd agent && uv run python -m vf_agent`.
-- Или собери exe: `agent\build.bat` → `agent\dist\VoiceForeverAgent.exe`.
+Из исходников нужен [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`), он сам скачает Python 3.15 и точные версии библиотек из `agent/uv.lock`: `cd agent && uv run python -m vf_agent`. Собрать exe самому: `agent\build.bat` → `agent\dist\VoiceForeverAgent.exe`.
 
-Первый запуск создаст `config.toml`. Укажи `server_url` и `token` (тот же, что в `VF_USERS`). Проверка без сервера: `uv run python -m vf_agent --test` пишет тестовую строку в /say.
+Первый запуск создаст `config.toml`. Укажи `server_url` и `token` (тот же, что в `VF_USERS`). Проверка без сервера: `VoiceForeverAgent.exe --test` (из исходников `uv run python -m vf_agent --test`) пишет тестовую строку в /say.
 
 Без аддона поставь `mode = "chat"`: агент будет открывать обычный чат и печатать `/p`, `/g`, `/w`.
 

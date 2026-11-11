@@ -1,6 +1,8 @@
 services:
   voiceforever:
-    build: ./server
+    # Ready-made image from GitHub Container Registry (see docs/server.md).
+    # Set VF_IMAGE in .env to use another image or a version tag.
+    image: ${VF_IMAGE:-ghcr.io/kirillkuzin/voiceforever-server:latest}
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -9,6 +11,17 @@ services:
     # in front and expose wss://your-domain/ws; do not expose 8765 to the internet directly.
     ports:
       - "127.0.0.1:8765:8765"
+    # Lets the server reach services published on the host, e.g. your own Whisper:
+    # VF_STT_BASE_URL=http://host.docker.internal:8000/v1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Whisper in another compose project that publishes no port: join its network.
+    # networks: [default, whisper]
+
+# networks:
+#   whisper:
+#     external: true
+#     name: <whisper network from `docker inspect <container>`>
 
 volumes:
   vf-data:
