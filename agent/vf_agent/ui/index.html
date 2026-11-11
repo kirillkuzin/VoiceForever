@@ -22,11 +22,10 @@
   <main class="view" id="view-wizard" hidden>
     <div class="field">
       <h1 class="title" data-i18n="wizard.title"></h1>
-      <p class="muted" data-i18n="wizard.lead"></p>
     </div>
     <ol class="steps" data-i18n-attr="aria-label:wizard.steps">
       <li data-step="1"><span class="sn">1</span><span class="sl" data-i18n="section.server"></span></li>
-      <li data-step="2"><span class="sn">2</span><span class="sl" data-i18n="wizard.step_input"></span></li>
+      <li data-step="2"><span class="sn">2</span><span class="sl" data-i18n="wizard.step_mode"></span></li>
       <li data-step="3"><span class="sn">3</span><span class="sl" data-i18n="section.voice"></span></li>
       <li data-step="4"><span class="sn">4</span><span class="sl" data-i18n="wizard.step_check"></span></li>
     </ol>
@@ -34,48 +33,44 @@
     <section class="panel grow" data-page="1" data-i18n-attr="aria-label:section.server">
       <h2 class="ph" data-i18n="section.server"></h2>
       <div class="field">
-        <label class="lbl" for="w-url" data-i18n="field.server_url"></label>
+        <div class="lrow"><label class="lbl" for="w-url" data-i18n="field.server_url"></label><button class="info" type="button" data-i18n-tip="tip.server_url"></button></div>
         <input class="inp" id="w-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off" placeholder="wss://vf.example.com/ws">
         <span class="err" data-error-for="server_url"></span>
-        <span class="hint" data-i18n="wizard.url_hint"></span>
       </div>
       <div class="field">
-        <label class="lbl" for="w-token" data-i18n="field.token"></label>
+        <div class="lrow"><label class="lbl" for="w-token" data-i18n="field.token"></label><button class="info" type="button" data-i18n-tip="tip.token"></button></div>
         <div class="row">
           <input class="inp grow" id="w-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
           <button class="btn ghost" type="button" data-reveal="w-token" style="min-width: 108px; min-height: 42px"></button>
         </div>
         <span class="err" data-error-for="token"></span>
-        <span class="hint" data-i18n="field.token_hint"></span>
       </div>
       <div class="err" data-error-for="file"></div>
       <div class="note" id="w-check" hidden></div>
     </section>
 
-    <section class="panel grow" data-page="2" data-i18n-attr="aria-label:section.input" hidden>
-      <h2 class="ph" data-i18n="section.input"></h2>
+    <section class="panel grow" data-page="2" data-i18n-attr="aria-label:field.mode" hidden>
+      <h2 class="ph"><span data-i18n="field.mode"></span><button class="info" type="button" data-i18n-tip="tip.mode"></button></h2>
       <div class="field" data-i18n-attr="aria-label:field.mode">
         <button class="choice" type="button" data-mode="addon">
           <span class="ct"><span class="dot"></span><span data-i18n="wizard.mode_addon"></span><span class="badge" data-i18n="wizard.recommended"></span></span>
-          <span class="hint" data-i18n="wizard.mode_addon_hint"></span>
         </button>
         <button class="choice" type="button" data-mode="chat">
           <span class="ct"><span class="dot"></span><span data-i18n="mode.chat"></span></span>
-          <span class="hint" data-i18n="wizard.mode_chat_hint"></span>
         </button>
       </div>
       <div class="field" data-addon-only>
-        <span class="lbl" data-i18n="field.addon_hotkey"></span>
+        <div class="lrow"><span class="lbl" data-i18n="field.addon_hotkey"></span><button class="info" type="button" data-i18n-tip="tip.addon_hotkey"></button></div>
         <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture data-i18n="common.change"></button></div>
         <span class="err" data-error-for="addon_hotkey"></span>
-        <span class="hint" data-hotkey-hint></span>
+        <span class="hint warn" data-hotkey-hint></span>
       </div>
     </section>
 
     <section class="panel grow scrollp" data-page="3" data-i18n-attr="aria-label:section.voice" hidden>
       <h2 class="ph" data-i18n="section.voice"></h2>
       <div class="field">
-        <label class="lbl" for="w-mic" data-i18n="field.mic"></label>
+        <div class="lrow"><label class="lbl" for="w-mic" data-i18n="field.mic"></label><button class="info" type="button" data-i18n-tip="tip.mic"></button></div>
         <div class="selwrap">
           <select class="inp sel-inp" id="w-mic" data-mic></select>
           <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -84,10 +79,10 @@
           <div class="lvl" data-level role="meter" data-i18n-attr="aria-label:mic.level" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
           <button class="btn ghost sm" type="button" data-mic-test style="flex: none"></button>
         </div>
-        <span class="hint" data-mic-hint></span>
+        <span class="hint bad" data-mic-hint></span>
       </div>
       <div class="field">
-        <span class="lbl" data-i18n="field.ptt_button"></span>
+        <div class="lrow"><span class="lbl" data-i18n="field.ptt_button"></span><button class="info" type="button" data-ptt-tip></button></div>
         <div class="padcard" data-padcard>
           <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
           <div class="field grow" style="gap: 2px" data-pad-info></div>
@@ -96,19 +91,17 @@
         <span class="err" data-error-for="ptt_button"></span>
       </div>
       <div class="field">
-        <span class="lbl" id="w-pttmode-l" data-i18n="field.ptt_mode"></span>
+        <div class="lrow"><span class="lbl" id="w-pttmode-l" data-i18n="field.ptt_mode"></span><button class="info" type="button" data-i18n-tip="tip.ptt_mode"></button></div>
         <div class="seg" role="group" aria-labelledby="w-pttmode-l">
           <button class="segb" type="button" data-pttmode="toggle" data-i18n="ptt.toggle"></button>
           <button class="segb" type="button" data-pttmode="hold" data-i18n="ptt.hold"></button>
         </div>
-        <span class="hint" data-pttmode-hint></span>
       </div>
-      <div class="note warn top" data-ptt-warn hidden></div>
     </section>
 
     <section class="panel grow scrollp" data-page="4" data-i18n-attr="aria-label:bind.title" hidden>
-      <h2 class="ph" data-i18n="bind.title"></h2>
-      <p id="w-bind-intro"></p>
+      <h2 class="ph"><span data-i18n="bind.title"></span><button class="info" type="button" data-bind-tip></button></h2>
+      <p class="hint" id="w-bind-intro"></p>
       <ol class="chks" data-bind-rows data-i18n-attr="aria-label:bind.progress"></ol>
       <div class="note" data-bind-result hidden></div>
       <div class="row" data-bind-actions></div>
@@ -119,15 +112,15 @@
       </div>
       <div class="note" id="w-voice-result" hidden></div>
       <div class="sep"></div>
-      <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span data-i18n="wizard.connect_on_start"></span></label>
+      <label class="sw" for="w-auto"><input id="w-auto" type="checkbox"><span class="track"></span><span data-i18n="settings.connect_on_start"></span></label>
       <label class="sw" for="w-boot"><input id="w-boot" type="checkbox"><span class="track"></span><span data-i18n="field.autostart"></span></label>
     </section>
 
     <div class="row">
       <button class="btn ghost" type="button" id="w-back" hidden data-i18n="common.back"></button>
       <span class="grow"></span>
-      <button class="btn ghost" type="button" id="w-skip" hidden data-i18n="wizard.skip"></button>
-      <button class="link" type="button" id="w-later" hidden style="align-self: center; margin-right: 8px" data-i18n="wizard.later"></button>
+      <button class="btn ghost" type="button" id="w-skip" hidden data-i18n="common.skip"></button>
+      <button class="link" type="button" id="w-later" hidden style="align-self: center; margin-right: 8px" data-i18n="common.skip"></button>
       <button class="btn wide" type="button" id="w-next"></button>
     </div>
   </main>
@@ -149,10 +142,7 @@
     <section class="panel" data-i18n-attr="aria-label:status.game_voice" style="gap: 10px; padding: 12px 16px">
       <div class="row" style="gap: 14px">
         <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true" style="flex: none"><path d="M16 3l11 4v8c0 7-5 12-11 14C10 27 5 22 5 15V7z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 12l5 10 5-10" fill="none" stroke="#dcb563" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <div class="field grow" style="gap: 1px">
-          <span style="font-weight: 700">World of Warcraft</span>
-          <span class="hint" id="game-hint"></span>
-        </div>
+        <div class="lrow grow" style="align-items: center"><span style="font-weight: 700">World of Warcraft</span><button class="info" type="button" data-i18n-tip="tip.game"></button></div>
         <span class="pill" id="game-pill"></span>
       </div>
       <div id="st-voice" hidden>
@@ -177,6 +167,7 @@
       <ul class="msgs" id="msgs"></ul>
       <div class="row" style="gap: 12px; padding-top: 4px">
         <button class="btn ghost" type="button" id="st-test" style="flex: none" data-i18n="status.test"></button>
+        <button class="info" type="button" data-i18n-tip="tip.test"></button>
         <span class="hint" id="st-test-hint"></span>
       </div>
     </section>
@@ -189,46 +180,43 @@
     <section class="panel" data-i18n-attr="aria-label:section.server">
       <h2 class="ph" data-i18n="section.server"></h2>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-url" data-i18n="field.server_url"></label><code class="tk">server_url</code></div>
-        <input class="inp" id="s-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off">
+        <div class="lrow"><label class="lbl" for="s-url" data-i18n="field.server_url"></label><button class="info" type="button" data-i18n-tip="tip.server_url"></button></div>
+        <input class="inp" id="s-url" data-field="server_url" type="text" spellcheck="false" autocomplete="off" placeholder="wss://vf.example.com/ws">
         <span class="err" data-error-for="server_url"></span>
-        <span class="hint" data-i18n="settings.url_hint"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-token" data-i18n="field.token"></label><code class="tk">token</code></div>
+        <div class="lrow"><label class="lbl" for="s-token" data-i18n="field.token"></label><button class="info" type="button" data-i18n-tip="tip.token"></button></div>
         <div class="row">
           <input class="inp grow" id="s-token" data-field="token" type="password" spellcheck="false" autocomplete="off">
           <button class="btn ghost" type="button" data-reveal="s-token" style="min-width: 108px; min-height: 42px"></button>
         </div>
         <span class="err" data-error-for="token"></span>
-        <span class="hint" data-i18n="field.token_hint"></span>
       </div>
     </section>
 
     <section class="panel" data-i18n-attr="aria-label:section.input">
       <h2 class="ph" data-i18n="section.input"></h2>
       <div class="field">
-        <div class="lrow"><span class="lbl" id="s-mode-l" data-i18n="field.mode"></span><code class="tk">mode</code></div>
+        <div class="lrow"><span class="lbl" id="s-mode-l" data-i18n="field.mode"></span><button class="info" type="button" data-i18n-tip="tip.mode"></button></div>
         <div class="seg" role="group" aria-labelledby="s-mode-l">
           <button class="segb" type="button" data-mode="addon" data-i18n="settings.mode_addon"></button>
           <button class="segb" type="button" data-mode="chat" data-i18n="mode.chat"></button>
         </div>
         <span class="err" data-error-for="mode"></span>
-        <span class="hint" id="s-mode-hint"></span>
       </div>
       <div class="field" data-addon-only>
-        <div class="lrow"><span class="lbl" data-i18n="field.addon_hotkey"></span><code class="tk">addon_hotkey</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="field.addon_hotkey"></span><button class="info" type="button" data-i18n-tip="tip.addon_hotkey"></button></div>
         <div class="keys"><span class="row" data-hotkey></span><span class="grow"></span><button class="btn ghost sm" type="button" data-capture data-i18n="common.change"></button></div>
         <span class="err" data-error-for="addon_hotkey"></span>
-        <span class="hint" data-hotkey-hint></span>
+        <span class="hint warn" data-hotkey-hint></span>
       </div>
     </section>
 
     <section class="panel" data-i18n-attr="aria-label:section.voice">
       <h2 class="ph" data-i18n="section.voice"></h2>
-      <label class="sw" for="s-ptt"><input id="s-ptt" data-check="ptt_enabled" type="checkbox"><span class="track"></span><span class="grow" data-i18n="settings.ptt_enabled"></span><code class="tk">ptt_enabled</code></label>
+      <label class="sw" for="s-ptt"><input id="s-ptt" data-check="ptt_enabled" type="checkbox"><span class="track"></span><span data-i18n="settings.ptt_enabled"></span></label>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-mic" data-i18n="field.mic"></label><code class="tk">mic_device</code></div>
+        <div class="lrow"><label class="lbl" for="s-mic" data-i18n="field.mic"></label><button class="info" type="button" data-i18n-tip="tip.mic"></button></div>
         <div class="selwrap">
           <select class="inp sel-inp" id="s-mic" data-mic></select>
           <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -237,10 +225,10 @@
           <div class="lvl" data-level role="meter" data-i18n-attr="aria-label:mic.level" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0"></div>
           <button class="btn ghost sm" type="button" data-mic-test style="flex: none"></button>
         </div>
-        <span class="hint" data-mic-hint></span>
+        <span class="hint bad" data-mic-hint></span>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl" data-i18n="field.ptt_button"></span><code class="tk">ptt_button</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="field.ptt_button"></span><button class="info" type="button" data-ptt-tip></button></div>
         <div class="padcard" data-padcard>
           <svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true" style="flex: none"><path d="M12 5h20c5 0 8 4 9 9l2 9c.8 4-3.5 6.5-6.5 3.5L31 21H13l-5.5 5.5C4.5 29.5.2 27 1 23l2-9c1-5 4-9 9-9z" fill="#120d09" stroke="#dcb563" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 11v6M7 14h6" stroke="#7d6130" stroke-width="1.6" stroke-linecap="round"/><circle cx="33" cy="11.5" r="1.6" fill="#7d6130"/><circle cx="36" cy="14.5" r="1.6" fill="#7d6130"/><circle cx="29" cy="17.5" r="3.4" fill="#2b2118" stroke="#ffe1a0" stroke-width="1.6"/><circle cx="29" cy="17.5" r="6" fill="none" stroke="#ffd77a" stroke-width="1" opacity=".55"/></svg>
           <div class="field grow" style="gap: 2px" data-pad-info></div>
@@ -250,6 +238,7 @@
         <div class="row" style="gap: 10px; align-items: baseline">
           <span class="hint grow" id="s-bind-line"></span>
           <button class="link" type="button" id="s-bind-open" style="flex: none" data-i18n="bind.open"></button>
+          <button class="info" type="button" data-bind-tip style="align-self: center"></button>
         </div>
         <div class="field" id="s-bind-box" hidden>
           <ol class="chks" data-bind-rows data-i18n-attr="aria-label:bind.progress"></ol>
@@ -258,62 +247,57 @@
         </div>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl" id="s-pttmode-l" data-i18n="field.ptt_mode"></span><code class="tk">ptt_mode</code></div>
+        <div class="lrow"><span class="lbl" id="s-pttmode-l" data-i18n="field.ptt_mode"></span><button class="info" type="button" data-i18n-tip="tip.ptt_mode"></button></div>
         <div class="seg" role="group" aria-labelledby="s-pttmode-l">
           <button class="segb" type="button" data-pttmode="toggle" data-i18n="ptt.toggle"></button>
           <button class="segb" type="button" data-pttmode="hold" data-i18n="ptt.hold"></button>
         </div>
-        <span class="hint" data-pttmode-hint></span>
       </div>
-      <div class="note warn top" data-ptt-warn hidden></div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-max" data-i18n="settings.max_record"></label><code class="tk">max_record_s</code></div>
+        <div class="lrow"><label class="lbl" for="s-max" data-i18n="settings.max_record"></label><button class="info" type="button" data-i18n-tip="tip.max_record"></button></div>
         <div class="row" style="gap: 12px"><input id="s-max" data-range="max_record_s" data-unit="s" type="range" min="5" max="60" step="5"><output class="val" for="s-max"></output></div>
         <span class="err" data-error-for="max_record_s"></span>
-        <span class="hint" data-i18n="settings.max_record_hint"></span>
       </div>
-      <label class="sw" for="s-snd"><input id="s-snd" data-check="ptt_sounds" type="checkbox"><span class="track"></span><span class="grow" data-i18n="settings.ptt_sounds"></span><code class="tk">ptt_sounds</code></label>
+      <label class="sw" for="s-snd"><input id="s-snd" data-check="ptt_sounds" type="checkbox"><span class="track"></span><span data-i18n="settings.ptt_sounds"></span><button class="info" type="button" data-i18n-tip="tip.ptt_sounds"></button></label>
     </section>
 
     <section class="panel" data-i18n-attr="aria-label:settings.game_window">
-      <h2 class="ph" data-i18n="settings.game_window"></h2>
-      <p class="hint" data-i18n="settings.game_window_hint"></p>
+      <h2 class="ph"><span data-i18n="settings.game_window"></span><button class="info" type="button" data-i18n-tip="tip.game_window"></button></h2>
       <div class="field">
-        <div class="lrow"><span class="lbl" data-i18n="settings.window_titles"></span><code class="tk">window_titles</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="settings.window_titles"></span></div>
         <div class="chips" data-chips="window_titles"></div>
         <span class="err" data-error-for="window_titles"></span>
       </div>
       <div class="field">
-        <div class="lrow"><span class="lbl" data-i18n="settings.process_names"></span><code class="tk">process_names</code></div>
+        <div class="lrow"><span class="lbl" data-i18n="settings.process_names"></span></div>
         <div class="chips" data-chips="process_names"></div>
         <span class="err" data-error-for="process_names"></span>
       </div>
       <div class="field" style="gap: 8px">
-        <button class="btn ghost" type="button" id="s-detect" style="align-self: flex-start" data-i18n="detect.button"></button>
+        <div class="row"><button class="btn ghost" type="button" id="s-detect" data-i18n="detect.button"></button><button class="info" type="button" data-i18n-tip="tip.detect"></button></div>
         <div class="note" id="s-detect-note" hidden></div>
-        <span class="hint" id="s-detect-hint" data-i18n="detect.hint"></span>
       </div>
     </section>
 
     <section class="panel" data-i18n-attr="aria-label:settings.timings">
       <h2 class="ph" data-i18n="settings.timings"></h2>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-focus" data-i18n="settings.focus_wait"></label><code class="tk">focus_wait_s</code></div>
+        <div class="lrow"><label class="lbl" for="s-focus" data-i18n="settings.focus_wait"></label><button class="info" type="button" data-i18n-tip="tip.focus_wait"></button></div>
         <div class="row" style="gap: 12px"><input id="s-focus" data-range="focus_wait_s" data-unit="s" type="range" min="1" max="60" step="1"><output class="val" for="s-focus"></output></div>
         <span class="err" data-error-for="focus_wait_s"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-open" data-i18n="settings.open_delay"></label><code class="tk">open_delay_ms</code></div>
+        <div class="lrow"><label class="lbl" for="s-open" data-i18n="settings.open_delay"></label><button class="info" type="button" data-i18n-tip="tip.open_delay"></button></div>
         <div class="row" style="gap: 12px"><input id="s-open" data-range="open_delay_ms" data-unit="ms" type="range" min="0" max="500" step="10"><output class="val" for="s-open"></output></div>
         <span class="err" data-error-for="open_delay_ms"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-part" data-i18n="settings.part_delay"></label><code class="tk">part_delay_ms</code></div>
+        <div class="lrow"><label class="lbl" for="s-part" data-i18n="settings.part_delay"></label><button class="info" type="button" data-i18n-tip="tip.part_delay"></button></div>
         <div class="row" style="gap: 12px"><input id="s-part" data-range="part_delay_ms" data-unit="ms" type="range" min="100" max="2000" step="50"><output class="val" for="s-part"></output></div>
         <span class="err" data-error-for="part_delay_ms"></span>
       </div>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-key" data-i18n="settings.key_delay"></label><code class="tk">key_delay_ms</code></div>
+        <div class="lrow"><label class="lbl" for="s-key" data-i18n="settings.key_delay"></label><button class="info" type="button" data-i18n-tip="tip.key_delay"></button></div>
         <div class="row" style="gap: 12px"><input id="s-key" data-range="key_delay_ms" data-unit="ms" type="range" min="0" max="100" step="5"><output class="val" for="s-key"></output></div>
         <span class="err" data-error-for="key_delay_ms"></span>
       </div>
@@ -322,16 +306,15 @@
 
     <section class="panel" data-i18n-attr="aria-label:settings.app">
       <h2 class="ph" data-i18n="settings.app"></h2>
-      <label class="sw" for="s-auto"><input id="s-auto" data-check="connect_on_start" type="checkbox"><span class="track"></span><span class="grow" data-i18n="settings.connect_on_start"></span><code class="tk">connect_on_start</code></label>
-      <label class="sw" for="s-tray"><input id="s-tray" data-check="close_to_tray" type="checkbox"><span class="track"></span><span class="grow" data-i18n="settings.close_to_tray"></span><code class="tk">close_to_tray</code></label>
-      <label class="sw" for="s-boot"><input id="s-boot" data-check="autostart" type="checkbox"><span class="track"></span><span class="grow" data-i18n="field.autostart"></span><code class="tk">autostart</code></label>
+      <label class="sw" for="s-auto"><input id="s-auto" data-check="connect_on_start" type="checkbox"><span class="track"></span><span data-i18n="settings.connect_on_start"></span></label>
+      <label class="sw" for="s-tray"><input id="s-tray" data-check="close_to_tray" type="checkbox"><span class="track"></span><span data-i18n="settings.close_to_tray"></span></label>
+      <label class="sw" for="s-boot"><input id="s-boot" data-check="autostart" type="checkbox"><span class="track"></span><span data-i18n="field.autostart"></span></label>
       <div class="field">
-        <div class="lrow"><label class="lbl" for="s-lang" data-i18n="settings.language"></label><code class="tk">language</code></div>
+        <div class="lrow"><label class="lbl" for="s-lang" data-i18n="settings.language"></label><button class="info" type="button" data-i18n-tip="tip.language"></button></div>
         <div class="selwrap">
           <select class="inp sel-inp" id="s-lang"></select>
           <svg width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="#dcb563" stroke-width="1.8" stroke-linecap="round"/></svg>
         </div>
-        <span class="hint" data-i18n="settings.language_hint"></span>
       </div>
       <div class="field" style="padding-top: 4px">
         <span class="lbl" data-i18n="settings.config_file"></span>
@@ -351,6 +334,7 @@
     <button class="tab" type="button" data-tab="settings" data-i18n="tabs.settings"></button>
   </nav>
 </div>
+<div class="tip" id="tip" role="tooltip" hidden></div>
 <script src="app.js"></script>
 </body>
 </html>

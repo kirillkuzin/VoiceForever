@@ -180,11 +180,47 @@ h1.title {
 p { margin: 0; }
 .muted { color: var(--muted); }
 .hint { font-size: 13.5px; line-height: 1.35; color: var(--hint); }
+.hint:empty { display: none; }
 .hint.good { color: var(--ok); }
+.hint.warn { color: #f6c77a; }
 .field { display: flex; flex-direction: column; gap: 6px; }
-.lrow { display: flex; align-items: baseline; gap: 8px; }
+.lrow { display: flex; align-items: center; gap: 6px; }
 .lbl { font-weight: 700; font-size: 14px; color: var(--muted); letter-spacing: .02em; }
-.tk { margin-left: auto; font: 12px var(--mono); color: #998b70; }
+
+/* An (i) next to a label: its explanation shows in one floating box (#tip) on hover or focus. */
+.info {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: #9a7a3e;
+  cursor: help;
+}
+.info:hover, .info:focus-visible, .info.open { color: var(--gold); }
+.info:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 1px; }
+.info.warn { color: var(--warn); }
+.info.warn:hover, .info.warn.open { color: #ffc977; }
+.info svg { pointer-events: none; }
+.tip {
+  position: fixed;
+  z-index: 10;
+  max-width: 300px;
+  padding: 9px 12px;
+  font: 14px/1.4 var(--body);
+  color: var(--parch);
+  white-space: pre-line;
+  background: linear-gradient(#2b2118, #18120d);
+  border: 1px solid var(--gold);
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #000, 0 8px 22px rgba(0, 0, 0, .7);
+  pointer-events: none;
+}
+.tip.warn { border-color: var(--warn); }
 .err { font-size: 13.5px; line-height: 1.35; color: var(--bad); }
 .err:empty { display: none; }
 
@@ -320,7 +356,6 @@ p { margin: 0; }
 .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1px solid var(--bronze); background: #0a0806; box-shadow: inset 0 1px 3px #000; }
 .choice.sel .dot { background: radial-gradient(circle, var(--gold) 0 4px, #0a0806 5px); border-color: var(--gold); }
 .badge { margin-left: auto; padding: 2px 9px; font-size: 12.5px; font-weight: 700; color: #1a120a; background: var(--gold); border-radius: 10px; }
-.choice .hint { padding-left: 26px; }
 
 /* segmented control */
 .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; padding: 3px; background: #0a0806; border: 1px solid #5d4826; border-radius: 4px; }
