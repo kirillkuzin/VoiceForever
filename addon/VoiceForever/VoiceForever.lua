@@ -10,6 +10,11 @@
 -- the same rules (toggle or hold, 0.3 s minimum, time limit), so they agree without talking.
 -- Lines with channel "ptt" set the button up; lines with channel "status" end the badge
 -- when the server could not send anything.
+--
+-- Texts come from Locales.lua, in the language of the WoW client.
+
+local _, ns = ...
+local L, T = ns.L, ns.T
 
 local PREFIX = "VF"
 local DEFAULT_KEY = "CTRL-SHIFT-F12"
@@ -79,35 +84,35 @@ function VoiceForever_Resolve(channel, target)
     if channel == "group" then
         local chatType = groupChannel()
         if not chatType then
-            return nil, "ты не в группе"
+            return nil, L.not_in_group
         end
         return chatType
     elseif channel == "whisper" then
         if target == "" then
-            return nil, "не указан получатель шёпота"
+            return nil, L.no_whisper_target
         end
         return "WHISPER", target
     elseif channel == "reply" then
         local name = lastTellTarget()
         if not name then
-            return nil, "тебе ещё никто не писал, некому ответить"
+            return nil, L.no_reply_target
         end
         return "WHISPER", name
     elseif channel == "channel" then
         local number = tonumber(target)
         if not number then
-            return nil, "неизвестный номер канала"
+            return nil, L.bad_channel_number
         end
         return "CHANNEL", number
     elseif channel == "guild" or channel == "officer" then
         if IsInGuild and not IsInGuild() then
-            return nil, "ты не в гильдии"
+            return nil, L.not_in_guild
         end
         return SIMPLE[channel]
     end
     local chatType = SIMPLE[channel]
     if not chatType then
-        return nil, "неизвестный канал " .. tostring(channel)
+        return nil, T("unknown_channel", tostring(channel))
     end
     return chatType
 end
@@ -115,17 +120,11 @@ end
 local Badge -- defined below, used by deliver()
 local handleControl
 
-local LABELS = {
-    SAY = "Сказать", YELL = "Крик", EMOTE = "Эмоция", PARTY = "Группа", RAID = "Рейд",
-    RAID_WARNING = "Объявление рейду", INSTANCE_CHAT = "Подземелье", GUILD = "Гильдия",
-    OFFICER = "Офицеры", WHISPER = "Шёпот", CHANNEL = "Канал",
-}
-
 local function deliver(line)
     local channel, target, text = VoiceForever_Parse(line)
     if not channel then
         if line ~= "" then
-            print("не понял строку от агента, пропускаю")
+            print(L.bad_line)
         end
         return
     end
@@ -138,8 +137,8 @@ local function deliver(line)
     end
     local chatType, extra = VoiceForever_Resolve(channel, target)
     if not chatType then
-        print("не отправлено (" .. extra .. "): " .. text)
-        Badge.result(false, "Не отправлено: " .. extra)
+        print(T("not_sent", extra, text))
+        Badge.result(false, T("not_sent_badge", extra))
         return
     end
     if chatType == "WHISPER" or chatType == "CHANNEL" then
@@ -147,7 +146,7 @@ local function deliver(line)
     else
         SendChat(text, chatType)
     end
-    local label = LABELS[chatType] or chatType
+    local label = L[chatType]
     if chatType == "WHISPER" then
         label = label .. ": " .. tostring(extra)
     end
@@ -210,11 +209,11 @@ local function render()
     local now = GetTime()
     if state.startedAt then
         local secs = math.floor(now - state.startedAt)
-        badgeText:SetText(string.format("|cffff4040●|r ЗАПИСЬ %d:%02d", math.floor(secs / 60), secs % 60))
+        badgeText:SetText("|cffff4040●|r " .. T("recording", math.floor(secs / 60), secs % 60))
     elseif state.toast and state.toastUntil and now < state.toastUntil then
         badgeText:SetText(state.toast)
     elseif state.pending > 0 then
-        badgeText:SetText("|cffffd100…|r Распознаю")
+        badgeText:SetText("|cffffd100…|r " .. L.recognising)
     else
         state.toast = nil
         badge:Hide()
@@ -311,7 +310,7 @@ setup:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
 setup:Hide()
 local setupText = setup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 setupText:SetPoint("CENTER")
-setupText:SetText("VoiceForever: нажми на геймпаде кнопку записи голоса\n(Esc — отмена)")
+setupText:SetText(L.setup_prompt)
 
 local setupRequest = nil
 local setupPending = nil -- a request that came in combat, run when combat ends
@@ -344,10 +343,9 @@ local function finishSetup(key)
     }
     applyBinding()
     if previous ~= "" then
-        print("кнопка записи: " .. key .. ". Раньше на ней было «" .. bindingName(previous)
-            .. "», пока аддон включён, она записывает голос.")
+        print(T("ptt_took", key, bindingName(previous)))
     else
-        print("кнопка записи: " .. key .. ", в игре на ней ничего не было.")
+        print(T("ptt_took_free", key))
     end
     ReloadUI() -- writes SavedVariables, which the agent reads
 end
@@ -355,7 +353,7 @@ end
 local function startSetup(request)
     if InCombatLockdown() then
         setupPending = request
-        print("выбор кнопки записи откроется после боя")
+        print(L.ptt_after_combat)
         return
     end
     setupRequest = request
@@ -372,25 +370,25 @@ setup:SetScript("OnKeyDown", function(_, key)
     if key == "ESCAPE" then
         setupRequest = nil
         finishSetup(nil)
-        print("выбор кнопки записи отменён")
+        print(L.ptt_cancelled)
     end
 end)
 setup:SetScript("OnUpdate", function()
     if setupRequest and GetTime() - setupRequest.openedAt > SETUP_TIMEOUT then
         setupRequest = nil
         finishSetup(nil)
-        print("кнопку записи так и не нажали, попробуй ещё раз из окна агента")
+        print(L.ptt_timeout)
     end
 end)
 
 handleControl = function(channel, target, text)
     if channel == "status" then
-        Badge.result(false, text ~= "" and text or "не отправлено")
+        Badge.result(false, text ~= "" and text or L.not_sent_short)
         return
     end
     local mode, max, nonce = text:match("^(%a+)%s+([%d%.]+)%s*(%S*)$")
     if mode ~= "toggle" and mode ~= "hold" then
-        print("не понял настройку записи от агента")
+        print(L.bad_ptt)
         return
     end
     max = tonumber(max) or 30
@@ -430,24 +428,23 @@ SlashCmdList.VOICEFOREVER = function(msg)
     if cmd == "key" and rest ~= "" then
         VoiceForeverDB.key = rest:upper()
         applyBinding()
-        print("клавиша агента: " .. VoiceForeverDB.key .. ". Укажи такую же в config.toml агента.")
+        print(T("key_set", VoiceForeverDB.key))
     elseif cmd == "test" then
-        deliver(PREFIX .. ":group::VoiceForever работает")
+        deliver(PREFIX .. ":group::" .. L.test_line)
     elseif cmd == "ptt" and rest == "off" then
         VoiceForeverDB.ptt = nil
         applyBinding()
-        print("кнопка записи освобождена, игра снова делает на ней своё")
+        print(L.ptt_freed)
     elseif cmd == "ptt" then
         local ptt = pttSettings()
         if ptt.key then
-            print("кнопка записи: " .. ptt.key .. ", режим: " .. (ptt.mode == "hold" and "держать" or "нажать и нажать ещё раз")
-                .. ". /vf ptt off — освободить её")
+            print(T("ptt_info", ptt.key, ptt.mode == "hold" and L.mode_hold or L.mode_toggle))
         else
-            print("кнопка записи не выбрана: выбери её в окне агента, шаг «Проверка в игре»")
+            print(L.ptt_none)
         end
     else
-        local group = groupChannel() or "нет группы"
-        print("клавиша агента: " .. VoiceForeverDB.key .. ", группа сейчас: " .. group)
-        print("/vf key CTRL-SHIFT-F12 — сменить клавишу, /vf test — тест в группу, /vf ptt — кнопка записи")
+        local group = groupChannel()
+        print(T("info", VoiceForeverDB.key, group and L[group] or L.no_group))
+        print(L.help)
     end
 end
