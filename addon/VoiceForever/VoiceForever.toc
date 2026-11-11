@@ -1,8 +1,8 @@
-## Interface: 11507
+## Interface: 16001
 ## Title: VoiceForever
 ## Notes: Sends messages from the VoiceForever voice agent to the right chat (party, raid, guild, whisper)
 ## Author: VoiceForever
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: VoiceForeverDB
 
 VoiceForever.lua
