@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from enum import StrEnum
 
+from .i18n import SOURCE, t
+
 
 class Channel(StrEnum):
     """Semantic channels. GROUP lets the in-game addon pick party / raid / instance chat."""
@@ -30,21 +32,10 @@ class Channel(StrEnum):
             return default if default is not None else cls.SAY
 
 
-LABELS: frozendict[Channel, str] = frozendict({
-    Channel.SAY: "Сказать",
-    Channel.YELL: "Крик",
-    Channel.EMOTE: "Эмоция",
-    Channel.GROUP: "Группа",
-    Channel.PARTY: "Группа",
-    Channel.RAID: "Рейд",
-    Channel.RAID_WARNING: "Объявление рейду",
-    Channel.INSTANCE: "Подземелье",
-    Channel.GUILD: "Гильдия",
-    Channel.OFFICER: "Офицеры",
-    Channel.WHISPER: "Шёпот",
-    Channel.REPLY: "Ответ на шёпот",
-    Channel.CHANNEL: "Канал",
-})
+def channel_name(channel: Channel, lang: str = SOURCE) -> str:
+    """The channel's name for people, e.g. "Guild" or "Гильдия"."""
+    return t(lang, f"chan.{channel}")
+
 
 _NAME_RE = re.compile(r"^[^\s\d\W][^\s\W]{1,11}(-[\w']{2,30})?$")
 
@@ -55,15 +46,15 @@ class ChatMessage:
     target: str  # whisper recipient or channel number, "" otherwise
     text: str
 
-    def label(self) -> str:
-        name = LABELS[self.channel]
+    def label(self, lang: str = SOURCE) -> str:
+        """Where the message goes, for people: "Guild", "Whisper → Arthorn", "Channel 2"."""
         match self.channel:
             case Channel.WHISPER if self.target:
-                return f"{name} → {self.target}"
+                return t(lang, "chan.whisper_to", name=self.target)
             case Channel.CHANNEL if self.target:
-                return f"{name} {self.target}"
+                return t(lang, "chan.numbered", n=self.target)
             case _:
-                return name
+                return channel_name(self.channel, lang)
 
 
 def validate(

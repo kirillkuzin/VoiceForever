@@ -52,4 +52,4 @@ def test_channel_is_a_plain_string_on_the_wire():
     msg = validate("guild", "", "hi")
     assert msg.channel is Channel.GUILD
     assert json.dumps({"channel": msg.channel}) == '{"channel": "guild"}'
-    assert msg.label() == "Гильдия"
+    assert msg.label() == "Guild" and msg.label("ru") == "Гильдия"

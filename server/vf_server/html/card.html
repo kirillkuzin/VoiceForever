@@ -24,35 +24,37 @@ button{min-height:44px;border-radius:4px;font:700 14px system-ui,sans-serif;curs
 </style>
 <div id="r"></div>
 <script>
-var W=window.TelegramWidget,R=document.querySelector('#r'),d={},sel='say',to='',more=0,err='',
-C={say:['Сказать','#f3eee6'],group:['Группа','#aab4ff'],guild:['Гильдия','#56e06a'],raid:['Рейд','#ff9c5a'],whisper:['Шёпот','#ff8ef0'],reply:['Ответить','#ff8ef0'],yell:['Крик','#ff5c5c'],instance:['Подземелье','#ff9c5a'],officer:['Офицеры','#40c860'],emote:['Эмоция','#ff9c5a'],party:['Группа','#aab4ff'],raid_warning:['Объявление','#ff9c5a'],channel:['Канал','#ffc8b0']},
-P={ask:['ждёт','#f2ad42'],busy:['отправляю','#f2ad42'],sent:['в игре','#5ed474'],fail:['не ушло','#ff7563'],cancel:['отменено','#a59a88']};
+var W=window.TelegramWidget,R=document.querySelector('#r'),L=/*L*/{},d={},sel='say',to='',more=0,err='',
+C={say:'#f3eee6',group:'#aab4ff',guild:'#56e06a',raid:'#ff9c5a',whisper:'#ff8ef0',reply:'#ff8ef0',yell:'#ff5c5c',instance:'#ff9c5a',officer:'#40c860',emote:'#ff9c5a',party:'#aab4ff',raid_warning:'#ff9c5a',channel:'#ffc8b0'},
+P={ask:'#f2ad42',busy:'#f2ad42',sent:'#5ed474',fail:'#ff7563',cancel:'#a59a88'};
+function T(k,v){return String(L[k]||k).replace(/\{(\w+)\}/g,function(m,n){return v&&n in v?v[n]:m})}
 function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
 function hm(t){var x=new Date(t*1e3);return('0'+x.getHours()).slice(-2)+':'+('0'+x.getMinutes()).slice(-2)}
 function load(){d=JSON.parse(W.chatData||'{}');sel=d.c||'say';to=d.t||'';err='';draw()}
-function chip(k){var c=C[k];return'<button class="c'+(sel==k?' on':'')+'" onclick="pick(\''+k+'\')"><span class="d" style="background:'+c[1]+'"></span>'+c[0]+'</button>'}
+function chip(k){return'<button class="c'+(sel==k?' on':'')+'" onclick="pick(\''+k+'\')"><span class="d" style="background:'+C[k]+'"></span>'+T(k=='reply'?k:'chan.'+k)+'</button>'}
 function pick(k){sel=k;to=k==d.c?d.t||'':'';draw()}
 function nick(i){to=d.n[i];draw()}
-function label(){return sel=='whisper'?'Шёпот → '+(to||'?'):sel=='reply'?'Ответ на шёпот':sel=='channel'?'Канал '+to:C[sel][0]}
+function label(){return sel=='whisper'?T('chan.whisper_to',{name:to||'?'}):sel=='channel'?T('chan.numbered',{n:to}):T('chan.'+sel)}
+function fit(){[].forEach.call(R.querySelectorAll('.c'),function(b){for(var f=14;b.scrollWidth>b.clientWidth&&f>11;)b.style.fontSize=--f+'px';var d=b.querySelector('.d');if(d&&b.scrollWidth>b.clientWidth)d.style.display='none'})}
 function draw(){
-var s=d.s||'ask',p=P[s],h='<div class="h"><svg width="20" height="20" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#120d09" stroke="#dcb563" stroke-width="2"/><rect x="13" y="7" width="6" height="11" rx="3" fill="#dcb563"/><path d="M10.5 15a5.5 5.5 0 0 0 11 0M16 21v3" fill="none" stroke="#dcb563" stroke-width="2" stroke-linecap="round"/></svg>VoiceForever<i></i><span class="pl" style="color:'+p[1]+'">'+p[0]+'</span></div>';
-h+='<div class="ln" style="color:'+(C[sel]||C.say)[1]+(s=='cancel'?';text-decoration:line-through;opacity:.55':'')+'">['+e(label())+'] '+e(d.x)+'</div>';
-if(d.o)h+='<div class="hn">Ты сказал: «'+e(d.o)+'»</div>';
+var s=d.s||'ask',h='<div class="h"><svg width="20" height="20" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#120d09" stroke="#dcb563" stroke-width="2"/><rect x="13" y="7" width="6" height="11" rx="3" fill="#dcb563"/><path d="M10.5 15a5.5 5.5 0 0 0 11 0M16 21v3" fill="none" stroke="#dcb563" stroke-width="2" stroke-linecap="round"/></svg>VoiceForever<i></i><span class="pl" style="color:'+P[s]+'">'+T(s)+'</span></div>';
+h+='<div class="ln" style="color:'+(C[sel]||C.say)+(s=='cancel'?';text-decoration:line-through;opacity:.55':'')+'">['+e(label())+'] '+e(d.x)+'</div>';
+if(d.o)h+='<div class="hn">'+T('you_said',{text:e(d.o)})+'</div>';
 if(s=='ask'){
 h+='<div class="g">'+['say','group','guild','raid','whisper','reply'].map(chip).join('')+'</div>';
-if(sel=='whisper'){h+='<div class="lb">Кому</div><div class="g">'+(d.n||[]).map(function(x,i){return'<button class="c'+(to==x?' on':'')+'" onclick="nick('+i+')">'+e(x)+'</button>'}).join('')+'</div><div class="hn">Ники из /names. Нужного нет: назови его голосом.</div>'}
-h+=more?'<div class="g">'+['yell','instance','officer','emote'].map(chip).join('')+'</div>':'<button class="a" style="align-self:flex-start" onclick="more=1;draw()">Другие каналы</button>';
-h+='<div class="r"><button class="b gh" onclick="go(\'x\')">Отмена</button><button class="b" style="flex:1.4"'+(sel=='whisper'&&!to?' disabled':'')+' onclick="go(\'s\')">Отправить</button></div>';
-h+='<div class="hn sa">'+(err||'Исправить текст: ответь на карточку голосом или текстом.')+'</div>'}
-if(s=='busy')h+='<div class="n sa" style="border-color:rgba(242,173,66,.45)">Отправляю в игру, жду ответа агента…</div>';
-if(s=='sent')h+='<div class="n" style="border-color:rgba(94,212,116,.45);color:#d2f4d8">✓ Ушло в чат игры в '+hm(d.a)+'</div><button class="a sa" style="align-self:flex-start" onclick="go(\'s\')">Отправить ещё раз</button>';
-if(s=='fail')h+='<div class="n" style="border-color:rgba(255,117,99,.55);color:#ffd8d0">✕ '+e(d.e||'Не получилось.')+'</div><div class="r sa"><button class="b" onclick="go(\'s\')">Повторить</button><button class="b gh" onclick="go(\'x\')">Отмена</button></div>';
-if(s=='cancel')h+='<div class="hn sa">Отменено, в игру ничего не ушло. <button class="a" onclick="go(\'u\')">Вернуть</button></div>';
-R.innerHTML=h}
+if(sel=='whisper'){h+='<div class="lb">'+T('to')+'</div><div class="g">'+(d.n||[]).map(function(x,i){return'<button class="c'+(to==x?' on':'')+'" onclick="nick('+i+')">'+e(x)+'</button>'}).join('')+'</div><div class="hn">'+T('names_hint')+'</div>'}
+h+=more?'<div class="g">'+['yell','instance','officer','emote'].map(chip).join('')+'</div>':'<button class="a" style="align-self:flex-start" onclick="more=1;draw()">'+T('more')+'</button>';
+h+='<div class="r"><button class="b gh" onclick="go(\'x\')">'+T('cancel_button')+'</button><button class="b" style="flex:1.4"'+(sel=='whisper'&&!to?' disabled':'')+' onclick="go(\'s\')">'+T('send')+'</button></div>';
+h+='<div class="hn sa">'+(err||T('fix_hint'))+'</div>'}
+if(s=='busy')h+='<div class="n sa" style="border-color:rgba(242,173,66,.45)">'+T('sending')+'</div>';
+if(s=='sent')h+='<div class="n" style="border-color:rgba(94,212,116,.45);color:#d2f4d8">'+T('sent_at',{time:hm(d.a)})+'</div><button class="a sa" style="align-self:flex-start" onclick="go(\'s\')">'+T('send_again')+'</button>';
+if(s=='fail')h+='<div class="n" style="border-color:rgba(255,117,99,.55);color:#ffd8d0">✕ '+(d.e?e(d.e):T('failed'))+'</div><div class="r sa"><button class="b" onclick="go(\'s\')">'+T('retry')+'</button><button class="b gh" onclick="go(\'x\')">'+T('cancel_button')+'</button></div>';
+if(s=='cancel')h+='<div class="hn sa">'+T('cancelled')+' <button class="a" onclick="go(\'u\')">'+T('undo')+'</button></div>';
+R.innerHTML=h;fit()}
 function go(a){
 if(a=='s'&&sel=='whisper'&&!to)return;
 var q=a+':'+d.i+(a=='s'?':'+sel+(to?':'+to:''):''),old=d.s;
 d.s=a=='s'?'busy':a=='x'?'cancel':'ask';draw();
-W.request(q).then(function(){},function(){d.s=old;err='Не получилось, попробуй ещё раз.';draw()})}
+W.request(q).then(function(){},function(){d.s=old;err=T('request_failed');draw()})}
 W.onEvent('chatDataChanged',load);load();if(W.ready)W.ready()
 </script>

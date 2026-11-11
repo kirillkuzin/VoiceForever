@@ -21,7 +21,8 @@ from vf_server.tgwidgets import (
     WidgetQuery,
     WidgetQueryMiddleware,
 )
-from vf_server.widgets import STALE_CARD, STYLE_PRESETS, TEST_LINE, Card, WidgetUI, fit, load_html
+from vf_server.i18n import LANGUAGES, t
+from vf_server.widgets import STYLE_PRESETS, TEST_LINE, Card, WidgetUI, fit, load_html
 
 USER = 42
 WIDGETS = ("card", "panel", "setup")
@@ -58,6 +59,9 @@ class FakeBot:
     async def unpin_chat_message(self, **kw):
         self.calls.append(("unpin", kw["message_id"]))
 
+    async def delete_message(self, **kw):
+        self.calls.append(("delete", kw["message_id"]))
+
     def of(self, kind):
         return [c for c in self.calls if isinstance(c, kind)]
 
@@ -93,9 +97,10 @@ def query(data, user=USER):
 # ---------------------------------------------------------------------- html
 
 
+@pytest.mark.parametrize("lang", LANGUAGES)
 @pytest.mark.parametrize("name", WIDGETS)
-def test_widget_fits_telegram_limits(name):
-    raw = load_html(name).encode()
+def test_widget_fits_telegram_limits(name, lang):
+    raw = load_html(name, lang).encode()
     assert len(raw) <= MAX_HTML_BYTES
     assert len(zlib.compress(raw, 9)) <= MAX_HTML_COMPRESSED_BYTES
     assert b"\0" not in raw
@@ -188,7 +193,7 @@ async def test_failed_card_can_be_retried():
     bot = FakeBot()
     await ui.show_card(bot, tg_message(), ChatMessage(Channel.GROUP, "", "Иду"), "иду", False)
     last = json.loads(bot.of(EditMessageWidgetData)[-1].chat_data)
-    assert last["s"] == "fail" and "Окно WoW" in last["e"]
+    assert last["s"] == "fail" and last["e"] == t("en", "ack.not_focused")
 
     hub.status = AckStatus.OK
     await ui.on_query(bot, query(f"s:{last['i']}:group"))
@@ -206,9 +211,9 @@ async def test_cancel_undo_and_stale_cards():
     assert bot.states() == ["cancel", "ask"]
 
     await ui.on_query(bot, query("s:unknown1:say"))
-    assert bot.of(AnswerWidgetQuery)[-1].data == STALE_CARD
+    assert bot.of(AnswerWidgetQuery)[-1].data == t("en", "widget.stale")
     await ui.on_query(bot, query(f"s:{card_id}:say", user=7))  # not in VF_USERS
-    assert bot.of(AnswerWidgetQuery)[-1].data == "Нет доступа."
+    assert bot.of(AnswerWidgetQuery)[-1].data == t("en", "widget.denied")
     assert hub.sent == []
 
 
@@ -302,7 +307,7 @@ async def test_setup_checklist_walkthrough():
 
     # The next phrase that reaches the game completes the list and pins the panel.
     await ui.show_card(bot, tg_message(), ChatMessage(Channel.GUILD, "", "Всем привет!"), "", False)
-    assert store.ui(USER).setup_voice == "[Гильдия] Всем привет!"
+    assert store.ui(USER).setup_voice == "[Guild] Всем привет!"
     assert store.ui(USER).panel_msg_id and ("pin", store.ui(USER).panel_msg_id) in bot.calls
     assert ui.setup_done(USER)
 
@@ -314,7 +319,7 @@ async def test_setup_test_reports_why_it_failed():
     await ui.send_setup(bot, USER, USER)
     await ui.on_query(bot, query("t"))
     data = json.loads(bot.of(EditMessageWidgetData)[-1].chat_data)
-    assert data["t"] == "fail" and "Агент на ПК не подключён" in data["e"]
+    assert data["t"] == "fail" and data["e"] == t("en", "ack.offline")
 
 
 # ---------------------------------------------------------------------- dispatcher
