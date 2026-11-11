@@ -52,6 +52,8 @@ HISTORY = 50
 RECORD_TICK_S = 0.1
 BIND_WAIT_GAME_S = 600  # the player starts the game and logs in
 BIND_WAIT_ADDON_S = 120  # the player presses the button in the game, the UI reloads
+ADDON_NOT_SET_UP = ("", -1.0)  # _addon_synced when the addon has no push-to-talk button yet
+ADDON_REREAD_S = 10.0  # until then, how often to look whether it got one (/vf ptt in the game)
 STATUS_TEXT: frozendict[str, str] = frozendict({
     "skip": "Пропустил: не похоже на сообщение в чат",
     "empty": "Не расслышал ни слова",
@@ -89,11 +91,12 @@ class Controller:
         self._poller: asyncio.Task[None] | None = None
         self._ptt = PttMachine()
         self._ticker: asyncio.Task[None] | None = None
-        self._capture: asyncio.Future[Press] | None = None
+        self._capture: asyncio.Future[Press | None] | None = None
         self._bind_task: asyncio.Task[None] | None = None
         self._mic_test = False
         self._sending = 0  # recordings sent and not answered yet
         self._addon_synced: tuple[str, float] | None = None  # (mode, max_s) the addon has
+        self._addon_read_at = 0.0  # time.monotonic() of the last look at its saved file
         self._test_ids = itertools.count(1)
         self._lock = threading.Lock()  # guards the snapshot fields above against the window's reads
         self._loop = asyncio.new_event_loop()
@@ -136,6 +139,10 @@ class Controller:
     def capture_button(self, timeout: float = 20.0) -> Press | None:
         """Wait for the next press on any pad button: the window assigns the push-to-talk button."""
         return self._call(self._capture_press, timeout).result(timeout=timeout + 5)
+
+    def cancel_capture(self) -> None:
+        """Stop waiting for a press (Esc in the window); capture_button then returns None."""
+        self._call(self._cancel_capture)
 
     def check_binding(self) -> None:
         """Start the in-game check of the push-to-talk button; steps arrive as BindCheck events."""
@@ -385,6 +392,10 @@ class Controller:
             self._mic_test = False
             await asyncio.wrap_future(self.devices.stop_recording())
 
+    async def _cancel_capture(self) -> None:
+        if self._capture is not None and not self._capture.done():
+            self._capture.set_result(None)
+
     async def _capture_press(self, timeout: float) -> Press | None:
         self._capture = self._loop.create_future()
         try:
@@ -406,11 +417,16 @@ class Controller:
         wanted = (str(config.ptt_mode), float(config.max_record_s))
         if self._addon_synced == wanted:
             return
-        if self._addon_synced is None:  # first look in this game session: what does the addon have?
+        if self._addon_synced == ADDON_NOT_SET_UP and time.monotonic() - self._addon_read_at < ADDON_REREAD_S:
+            return
+        if self._addon_synced in (None, ADDON_NOT_SET_UP):  # what does the addon have in this game session?
+            self._addon_read_at = time.monotonic()
             db = await asyncio.to_thread(read_addon_db, backend)
             ptt = db.get("ptt") if isinstance(db.get("ptt"), dict) else {}
             if not ptt.get("key"):
-                self._addon_synced = wanted  # the button is not set up yet: the check will send it
+                # No button in the game yet: nothing to keep in step until the check sets it up,
+                # and the check sends the mode and the time limit itself.
+                self._addon_synced = ADDON_NOT_SET_UP
                 return
             self._addon_synced = (str(ptt.get("mode", "")), float(ptt.get("max", 0) or 0))
             if self._addon_synced == wanted:
@@ -459,25 +475,19 @@ class Controller:
             return
         self._emit(BindCheck("sent"))
 
-        pressed = False
+        pressed: Press | None = None
         try:
             async with asyncio.timeout(BIND_WAIT_ADDON_S):
                 while True:
                     if pressed or self.recording.state is not RecState.IDLE:
                         await asyncio.sleep(0.5)
-                    elif await self._pressed_soon():
-                        pressed = True
+                    elif (pressed := await self._pressed_soon()) is not None:
                         self._emit(BindCheck("reloading"))
                     db = await asyncio.to_thread(read_addon_db_from, exe)
                     ptt = db.get("ptt") if isinstance(db.get("ptt"), dict) else {}
                     if ptt.get("nonce") == nonce:
                         self._addon_synced = (str(config.ptt_mode), float(config.max_record_s))
-                        self._emit(BindCheck(
-                            "done",
-                            key=str(ptt.get("key", "")),
-                            previous=str(ptt.get("previous", "")),
-                            taken=bool(ptt.get("key")),
-                        ))
+                        self._emit(self._bind_result(config, pressed, ptt))
                         return
         except TimeoutError:
             pass
@@ -489,12 +499,33 @@ class Controller:
             error, detail = "timeout", "аддон не сохранил результат, попробуй /reload в игре"
         self._emit(BindCheck("error", error=error, detail=detail))
 
-    async def _pressed_soon(self) -> bool:
+    @staticmethod
+    def _bind_result(config: AgentConfig, pressed: Press | None, ptt: dict[str, Any]) -> BindCheck:
+        key, previous = str(ptt.get("key", "")), str(ptt.get("previous", ""))
+        if pressed is not None and pressed.button != config.ptt_button:
+            # The addon took the button pressed in the game; the agent records on another one.
+            playstation = pressed.pad.playstation
+            return BindCheck(
+                "error",
+                key=key,
+                error="wrong_button",
+                detail=f"в игре нажата кнопка «{button_label(pressed.button, playstation)}», а запись "
+                f"настроена на «{button_label(config.ptt_button, playstation)}»",
+            )
+        return BindCheck(
+            "done",
+            key=key,
+            previous=previous,
+            previous_name=str(ptt.get("previousName", "")) or previous,
+            taken=bool(key),
+        )
+
+    async def _pressed_soon(self) -> Press | None:
         """Wait up to a second for any pad press (the player presses the button in the game)."""
         if self.devices is None:
             await asyncio.sleep(1)
-            return False
-        return await self._capture_press(1.0) is not None
+            return None
+        return await self._capture_press(1.0)
 
     async def _stop_all(self) -> None:
         await self._cancel_bind_check()

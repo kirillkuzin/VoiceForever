@@ -31,6 +31,9 @@
     wait: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 2h7M4.5 14h7M5 2.5c0 3 6 3.5 6 5.5s-6 2.5-6 5.5M11 2.5c0 3-6 3.5-6 5.5s6 2.5 6 5.5" fill="none" stroke="#f2ad42" stroke-width="1.6" stroke-linecap="round"/></svg>',
     bad: '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="#ff7563" stroke-width="2.2" stroke-linecap="round"/></svg>',
     remove: '<svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    warn: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" style="flex: none"><path d="M9 2l7.5 13h-15z" fill="none" stroke="#f2ad42" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 7v4M9 13.2v.3" stroke="#f2ad42" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    mic: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    tg: '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M14.5 2L1.5 7.2l4.3 1.6L12 4.5 7.2 9.6v4l2.4-2.6 3 2.2z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
   };
 
   // ------------------------------------------------------------------ words
@@ -93,6 +96,24 @@
   }
 
   const TEST_HINT = 'Строка уйдёт в /say, когда окно WoW станет активным.';
+  const TEST_TEXT = 'VoiceForever test';
+
+  // What became of a recording, when nothing reached the chat (VoiceResult.status).
+  const VOICE_FAILED = {
+    stt_error: 'не смог распознать речь',
+    bad_audio: 'не смог прочитать запись',
+    too_long: 'запись длиннее, чем он принимает',
+    unsupported: 'не принимает голос от агента, его нужно обновить',
+    offline: 'нет связи',
+    timeout: 'не ответил вовремя',
+    error: 'ошибка на сервере',
+  };
+
+  const LEVEL_BARS = 24;
+  const HOT_BAR = 20; // from here the meter turns red: too loud
+
+  // The in-game check of the push-to-talk button, in the order the agent reports it.
+  const BIND_STEPS = ['waiting_game', 'waiting_focus', 'sent', 'reloading', 'done'];
 
   // ------------------------------------------------------------------ state
   const S = {
@@ -112,6 +133,16 @@
     capturing: false,
     actionsFor: null,
     savedNote: '', // shown in the save bar right after saving
+    pad: { connected: false, name: '', playstation: false, error: '' },
+    recording: { state: 'idle', started_at: null, max_s: 0 },
+    padButtons: [],
+    mics: null, // microphone names Windows lists; null until asked
+    micError: '',
+    micTest: false, // the microphone is open only to show its level
+    padCapture: false, // waiting for a press to assign the button
+    padNote: '', // what came of the last assignment
+    bind: { check: null, last: -1 }, // the in-game check: its last step, and the last one before an error
+    wizardVoice: null, // the recording made on the last wizard step
   };
 
   const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -143,13 +174,21 @@
     S.status = state.status;
     S.game = state.game;
     S.history = state.history;
+    S.pad = state.pad;
+    S.recording = state.recording;
+    S.padButtons = state.pad_buttons;
+    S.bind.check = state.bind_check;
     $('#version').textContent = `агент ${state.version}`;
+    for (const meter of $$('.lvl')) meter.replaceChildren(...Array.from({ length: LEVEL_BARS }, () => h('span')));
 
     bindControls();
     fillForm();
     renderStatus();
     renderGame();
     renderMessages();
+    renderVoice();
+    renderRecording();
+    renderBind();
     $('#st-test-hint').textContent = TEST_HINT;
 
     if (state.first_run) {
@@ -163,6 +202,8 @@
     S.ready = true;
     for (const event of S.pending.splice(0)) onEvent(event);
     setInterval(renderStatusLine, 1000);
+    setInterval(() => { if (S.recording.state === 'recording') renderRecording(); }, 250);
+    loadMics();
   }
 
   function onEvent(event) {
@@ -187,6 +228,30 @@
         S.game = event.game;
         renderGame();
         break;
+      case 'voice':
+        S.history.unshift(event.voice);
+        S.history.length = Math.min(S.history.length, 50);
+        renderMessages();
+        if (S.view === 'wizard' && S.wizard.step === 4) {
+          S.wizardVoice = event.voice;
+          renderVoiceTest();
+          $('#w-voice-result').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+        break;
+      case 'pad':
+        S.pad = event.pad;
+        renderVoice();
+        break;
+      case 'recording':
+        S.recording = event.recording;
+        renderRecording();
+        break;
+      case 'mic':
+        renderLevel(event.level);
+        break;
+      case 'bind_check':
+        onBindCheck(event.check);
+        break;
     }
   }
 
@@ -196,6 +261,7 @@
 
   // ------------------------------------------------------------------ views
   function showView(name) {
+    if (name !== S.view) setMicTest(false);
     S.view = name;
     for (const view of ['wizard', 'status', 'settings']) $(`#view-${view}`).hidden = view !== name;
     $('#tabs').hidden = name === 'wizard';
@@ -292,32 +358,62 @@
 
   function renderMessages() {
     const list = $('#msgs');
-    if (!S.history.length) {
-      list.replaceChildren(h('li', { class: 'hint empty' }, 'Пока пусто. Скажи что-нибудь боту в Telegram или нажми «Тест в /say».'));
+    // A recording's message comes twice: as typed, then with what the server made of it. Keep the second.
+    const rows = S.history.filter((d) => !(d.kind === 'delivery' && d.voice_id));
+    if (!rows.length) {
+      list.replaceChildren(h('li', { class: 'hint empty' }, 'Пока пусто. Скажи что-нибудь с геймпада, боту в Telegram или нажми «Тест в /say».'));
       return;
     }
-    list.replaceChildren(...S.history.map((d) => {
-      const [label, color] = channelLabel(d.channel, d.target);
+    list.replaceChildren(...rows.map((d) => {
       const time = new Date(d.at * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-      let mark = 'ok';
-      let note = null;
-      let label2 = 'Отправлено в игру';
-      if (d.status === 'not_focused') {
-        mark = 'wait';
-        label2 = 'Не отправлено: окно WoW не было активно';
-        note = h('span', { class: 'mdetail warn' }, `Окно WoW не стало активным за ${focusWait()} с, сообщение не ушло.`);
-      } else if (d.status !== 'ok') {
-        mark = 'bad';
-        label2 = 'Ошибка ввода';
-        note = h('span', { class: 'mdetail bad' }, `Не получилось ввести: ${d.detail || 'неизвестная ошибка'}`);
-      }
+      const voice = d.kind === 'voice';
+      const test = !voice && d.channel === 'say' && d.text === TEST_TEXT;
+      const source = voice ? 'Голос с геймпада' : test ? 'Тест' : 'Голосовое из Telegram';
+      const view = messageView(d);
       return h('li', { class: 'msg' },
         h('span', { class: 'time' }, time),
-        h('div', { class: 'field', style: 'gap: 2px; min-width: 0' },
-          h('span', { class: 'mtext', style: `color: ${color}` }, h('b', {}, `[${label}]`), ` ${d.text}`),
-          note),
-        h('span', { role: 'img', 'aria-label': label2, title: label2, style: 'padding-top: 2px' }, icon(mark)));
+        h('span', { class: 'src', role: 'img', 'aria-label': source, title: source }, test ? null : icon(voice ? 'mic' : 'tg')),
+        h('div', { class: 'field', style: 'gap: 2px; min-width: 0', title: d.transcript ? `Распознано: «${d.transcript}»` : null },
+          view.line, view.note),
+        h('span', { role: 'img', 'aria-label': view.label, title: view.label, style: 'padding-top: 2px' }, icon(view.mark)));
     }));
+  }
+
+  // A row of the list: a typed message (Delivery) or what became of a recording (VoiceResult).
+  function messageView(d) {
+    const tagged = () => {
+      const [label, color] = channelLabel(d.channel, d.target);
+      return h('span', { class: 'mtext', style: `color: ${color}` }, h('b', {}, `[${label}]`), ` ${d.text}`);
+    };
+    const plain = (text) => h('span', { class: 'mtext muted' }, text);
+    const note = (kind, text) => h('span', { class: `mdetail ${kind}` }, text);
+    switch (d.status) {
+      case 'ok':
+        return { line: tagged(), note: null, mark: 'ok', label: 'Отправлено в игру' };
+      case 'not_focused':
+        return {
+          line: tagged(), mark: 'wait', label: 'Не отправлено: окно WoW не было активно',
+          note: note('warn', `Окно WoW не стало активным за ${focusWait()} с, сообщение не ушло.`),
+        };
+      case 'skip':
+        return {
+          line: plain(d.transcript ? `«${d.transcript}»` : 'Запись без текста'), mark: 'wait', label: 'Не для чата',
+          note: note('muted', 'Не похоже на сообщение в чат, ничего не ушло.'),
+        };
+      case 'empty':
+        return { line: plain('Не расслышал, в чат ничего не ушло'), note: null, mark: 'wait', label: 'Пустая запись' };
+      default:
+        if (d.kind === 'voice' && !d.text) {
+          return {
+            line: plain('Запись не принята'), mark: 'bad', label: 'Отказ сервера',
+            note: note('bad', `Сервер: ${d.detail || VOICE_FAILED[d.status] || VOICE_FAILED.error}.`),
+          };
+        }
+        return {
+          line: d.text ? tagged() : plain('Сообщение не ушло'), mark: 'bad', label: 'Ошибка ввода',
+          note: note('bad', `Не получилось ввести: ${d.detail || 'неизвестная ошибка'}`),
+        };
+    }
   }
 
   async function runTest(button, onTick, onDone) {
@@ -343,10 +439,12 @@
       else mark.textContent = String(n);
     }
     for (const page of $$('#view-wizard [data-page]')) page.hidden = Number(page.dataset.page) !== step;
+    if (S.view === 'wizard' && step !== 3) setMicTest(false);
     $('#w-back').hidden = step === 1;
     $('#w-skip').hidden = !(step === 1 && (check === 'failed' || check === 'replaced'));
+    $('#w-later').hidden = !(step === 4 && !(S.bind.check && S.bind.check.step === 'done'));
     const next = $('#w-next');
-    next.textContent = ['Подключиться', 'Далее', 'Готово'][step - 1];
+    next.textContent = ['Подключиться', 'Далее', 'Далее', 'Готово'][step - 1];
     next.disabled = step === 1 && check === 'checking';
     $$('[data-focus-wait]').forEach((el) => { el.textContent = focusWait(); });
     renderCheck();
@@ -412,41 +510,29 @@
         return;
       }
       if (!result.reconnecting) await call('reconnect');
-    } else if (step === 2) {
+    } else if (step === 2 || step === 3) {
       const result = await saveForm();
       if (result && result.ok) {
-        S.wizard.step = 3;
+        S.wizard.step = step + 1;
+        if (S.wizard.step === 3) loadMics();
+        if (S.wizard.step === 4) S.wizardVoice = null;
         renderWizard();
+        renderVoiceTest();
       }
     } else {
-      S.form.connect_on_start = $('#w-auto').checked;
-      S.form.autostart = $('#w-boot').checked;
-      const result = await saveForm();
-      if (result && result.ok) {
-        showView('status');
-        if (S.status.state === 'disconnected' && S.saved.connect_on_start) call('connect');
-      }
+      await wizardFinish();
     }
   }
 
-  async function wizardTest() {
-    const box = $('#w-test-result');
-    const meter = h('div', { style: 'width: 100%' });
-    const label = h('span');
-    box.hidden = false;
-    box.className = 'note warn col';
-    box.replaceChildren(label, h('div', { class: 'meter' }, meter));
-    const total = focusWait();
-    await runTest($('#w-test'), (left) => {
-      label.textContent = `Жду окно WoW: осталось ${left} с`;
-      meter.style.width = `${Math.round((left / total) * 100)}%`;
-    }, (result) => {
-      box.className = `note ${result.status === 'ok' ? 'good' : result.status === 'not_focused' ? 'warn' : 'bad'}`;
-      const text = result.status === 'ok' ? 'Строка ушла в /say. Можно играть.'
-        : result.status === 'not_focused' ? `Окно WoW не стало активным за ${total} с. Попробуй ещё раз.`
-        : `Не получилось: ${result.detail}`;
-      box.replaceChildren(icon(result.status === 'ok' ? 'ok' : result.status === 'not_focused' ? 'wait' : 'bad'), h('span', {}, text));
-    });
+  async function wizardFinish() {
+    S.form.connect_on_start = $('#w-auto').checked;
+    S.form.autostart = $('#w-boot').checked;
+    const result = await saveForm();
+    if (result && result.ok) {
+      if (bindRunning()) call('cancel_game_binding');
+      showView('status');
+      if (S.status.state === 'disconnected' && S.saved.connect_on_start) call('connect');
+    }
   }
 
   // ------------------------------------------------------------------ settings tab
@@ -463,6 +549,7 @@
     renderChips();
     renderMode();
     renderHotkey();
+    renderVoice();
     renderDirty();
   }
 
@@ -503,6 +590,7 @@
       button.setAttribute('aria-pressed', String(on));
     }
     for (const el of $$('[data-addon-only]')) el.hidden = mode !== 'addon';
+    renderVoice();
     $('#s-mode-hint').textContent = mode === 'addon'
       ? 'Чат не открывается, аддон сам выбирает группу, рейд или подземелье.'
       : 'Без аддона: агент открывает чат клавишей Enter и печатает /p, /g, /w.';
@@ -622,11 +710,339 @@
     if (!wasConfigured && S.status.state === 'disconnected' && S.saved.connect_on_start) call('connect');
   }
 
+  // ------------------------------------------------------------------ push-to-talk
+  function padButton(name) {
+    return S.padButtons.find((b) => b.name === name) || { name, xbox: name, playstation: name };
+  }
+
+  function padLabel(name) {
+    const button = padButton(name);
+    return S.pad.playstation ? button.playstation : button.xbox;
+  }
+
+  // The button in a sentence: "правый стик (RS)", but "A" and "LB" stay as they are.
+  const inSentence = (label) => (/^[А-ЯЁ][а-яё]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label);
+
+  async function loadMics() {
+    const result = await call('list_mics');
+    if (!result) return;
+    S.mics = result.mics;
+    S.micError = result.error;
+    renderVoice();
+  }
+
+  async function setMicTest(on) {
+    if (on === S.micTest) return;
+    S.micTest = on;
+    renderVoice();
+    if (!on) renderLevel(0);
+    const result = await call('mic_test', on, (S.form && S.form.mic_device) || '');
+    if (on && result && result.error) {
+      S.micTest = false;
+      S.micError = result.error;
+      renderVoice();
+    }
+  }
+
+  function renderLevel(level) {
+    const lit = Math.round(Math.max(0, Math.min(1, level)) * LEVEL_BARS);
+    for (const meter of $$('.lvl')) {
+      [...meter.children].forEach((bar, i) => { bar.className = i < lit ? (i >= HOT_BAR ? 'hot' : 'on') : ''; });
+      if (meter.hasAttribute('aria-valuenow')) meter.setAttribute('aria-valuenow', String(lit));
+    }
+  }
+
+  function renderVoice() {
+    if (!S.form) return;
+    const form = S.form;
+    const addon = form.mode === 'addon';
+    const broken = Boolean(S.pad.error);
+
+    // microphone
+    const names = S.mics || [];
+    const options = [h('option', { value: '' }, 'Микрофон Windows по умолчанию'),
+      ...names.map((name) => h('option', { value: name }, name))];
+    if (form.mic_device && !names.includes(form.mic_device)) {
+      options.push(h('option', { value: form.mic_device }, `${form.mic_device} (не подключён)`));
+    }
+    for (const select of $$('[data-mic]')) {
+      select.replaceChildren(...options.map((o) => o.cloneNode(true)));
+      select.value = form.mic_device || '';
+      select.disabled = broken;
+    }
+    for (const button of $$('[data-mic-test]')) {
+      button.textContent = S.micTest ? 'Стоп' : 'Проверить';
+      button.disabled = broken;
+    }
+    const micHint = broken ? 'Микрофон не работает, пока агент не видит SDL3.dll.'
+      : S.micError ? `Микрофон: ${S.micError}`
+      : S.micTest ? 'Скажи что-нибудь: полоска должна доходить до середины.'
+      : 'Агент слушает микрофон только пока идёт запись.';
+    for (const hint of $$('[data-mic-hint]')) {
+      hint.textContent = micHint;
+      hint.classList.toggle('bad', broken || Boolean(S.micError));
+    }
+
+    // button
+    for (const card of $$('[data-padcard]')) card.classList.toggle('cap', S.padCapture);
+    for (const info of $$('[data-pad-info]')) {
+      if (S.padCapture) {
+        info.replaceChildren(
+          h('span', { class: 'big pulse', role: 'status', style: 'font-size: 17px' }, 'Нажми кнопку на геймпаде…'),
+          h('span', { class: 'hint' }, 'Esc отменит.'));
+        continue;
+      }
+      const color = broken ? 'var(--bad)' : S.pad.connected ? 'var(--ok)' : 'var(--off)';
+      const line = broken ? `Геймпад не работает: ${S.pad.error}`
+        : S.padNote ? S.padNote
+        : S.pad.connected ? `${S.pad.name} подключён`
+        : 'Геймпад не найден. Подключи его, агент заметит сам.';
+      info.replaceChildren(
+        h('span', { class: 'big' }, padLabel(form.ptt_button)),
+        h('span', { class: 'hint row', style: 'gap: 6px' },
+          h('span', { class: 'led', style: `background: ${color}; box-shadow: 0 0 6px ${color}` }), line));
+    }
+    for (const button of $$('[data-pad-capture]')) button.disabled = S.padCapture || broken || !S.pad.connected;
+
+    // mode
+    for (const button of $$('[data-pttmode]')) {
+      const on = button.dataset.pttmode === form.ptt_mode;
+      button.classList.toggle('sel', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
+    const modeHint = form.ptt_mode === 'hold'
+      ? 'Говоришь, пока держишь кнопку. Отпустил, и текст уходит в чат.'
+      : `Нажми, говори, нажми ещё раз, и текст уйдёт в чат. Не дольше ${form.max_record_s} с.`;
+    for (const hint of $$('[data-pttmode-hint]')) hint.textContent = modeHint;
+
+    // what the game does with the same button
+    const warning = !addon ? 'Без аддона игра тоже получит это нажатие. Выбери кнопку, на которой в игре ничего нет.'
+      : form.ptt_button === 'rightstick' ? 'В WoW Forever правый стик ставит метки. Аддон заберёт эту кнопку себе, метки можно перенести на другую в настройках управления игры.'
+      : form.ptt_button === 'misc1' ? 'Кнопку Share агент видит через GameInput: после смены кнопки перезапусти агент. Игра её, скорее всего, не видит, и значка записи в игре может не быть.'
+      : 'Аддон заберёт эту кнопку у игры, пока он включён. Что на ней было, покажет проверка в игре.';
+    for (const note of $$('[data-ptt-warn]')) {
+      note.hidden = S.padCapture;
+      note.replaceChildren(icon('warn'), h('span', {}, warning));
+    }
+
+    renderStatusVoice();
+    renderVoiceTest();
+    renderBind();
+  }
+
+  async function capturePad() {
+    if (S.padCapture) return;
+    S.padCapture = true;
+    S.padNote = '';
+    renderVoice();
+    const result = await call('capture_pad_button', 20);
+    const cancelled = !S.padCapture;
+    S.padCapture = false;
+    if (result && result.button) {
+      if (result.button !== S.form.ptt_button) {
+        S.form.ptt_button = result.button;
+        changed();
+      }
+    } else if (!cancelled) {
+      S.padNote = 'Не дождался нажатия. Нажми «Назначить» ещё раз.';
+    }
+    renderVoice();
+  }
+
+  function cancelPadCapture() {
+    S.padCapture = false;
+    renderVoice();
+    call('cancel_pad_capture');
+  }
+
+  // ------------------------------------------------------------------ recording
+  function recordingPill() {
+    const rec = S.recording;
+    if (rec.state === 'recording') {
+      const up = Math.max(0, Math.floor(Date.now() / 1000 - (rec.started_at || Date.now() / 1000)));
+      return h('span', { class: 'rec on', role: 'status' }, h('span', { class: 'redled pulse' }),
+        `Запись ${Math.floor(up / 60)}:${String(up % 60).padStart(2, '0')}`);
+    }
+    if (rec.state === 'processing') return h('span', { class: 'rec busy pulse', role: 'status' }, 'Распознаю…');
+    return null;
+  }
+
+  function renderRecording() {
+    renderStatusVoice();
+    renderVoiceTest();
+  }
+
+  function renderStatusVoice() {
+    const saved = S.saved;
+    const on = Boolean(saved && saved.ptt_enabled);
+    $('#st-voice').hidden = !on;
+    if (!on) return;
+    $('#st-pad-label').textContent = padLabel(saved.ptt_button);
+    const mode = saved.ptt_mode === 'hold' ? 'удерживать' : 'нажал и нажал';
+    const mic = saved.mic_device || 'микрофон по умолчанию';
+    $('#st-pad-hint').textContent = S.pad.error ? `Не работает: ${S.pad.error}` : `${mic} · ${mode}`;
+    const pill = recordingPill() || (S.pad.error ? h('span', { class: 'pill', style: 'color: var(--bad); border-color: var(--bad)' }, 'выключено')
+      : S.pad.connected ? h('span', { class: 'pill', style: 'color: var(--muted); border-color: var(--bronze)' }, 'готов')
+      : h('span', { class: 'pill', style: 'color: var(--off); border-color: var(--off)' }, 'нет геймпада'));
+    $('#st-rec').replaceChildren(pill);
+    $('#st-level').hidden = S.recording.state !== 'recording';
+  }
+
+  // The last wizard step: say something and see it arrive.
+  function renderVoiceTest() {
+    if (!S.form) return;
+    const say = $('#w-voice-say');
+    const label = h('b', { style: 'color: var(--gold)' }, inSentence(padLabel(S.form.ptt_button)));
+    if (S.pad.error) say.replaceChildren(`Геймпад не работает: ${S.pad.error}`);
+    else if (!S.pad.connected) say.replaceChildren('Подключи геймпад, чтобы проверить голос.');
+    else if (S.form.ptt_mode === 'hold') say.replaceChildren('Зажми ', label, ', скажи «Всем привет» и отпусти.');
+    else say.replaceChildren('Нажми ', label, ', скажи «Всем привет», нажми ещё раз.');
+    $('#w-voice-rec').replaceChildren(recordingPill() || '');
+    const box = $('#w-voice-result');
+    const v = S.wizardVoice;
+    box.hidden = !v;
+    if (!v) return;
+    const view = messageView(v);
+    const kind = v.status === 'ok' ? 'good' : view.mark === 'wait' ? 'warn' : 'bad';
+    box.className = `note ${kind} top`;
+    box.replaceChildren(icon(view.mark === 'wait' ? 'warn' : view.mark),
+      h('div', { class: 'field', style: 'gap: 2px' }, view.line, view.note,
+        v.status === 'ok' ? h('span', { class: 'mdetail' }, 'Ушло в чат игры.') : null));
+  }
+
+  // ------------------------------------------------------------------ in-game check of the button
+  const bindRunning = () => Boolean(S.bind.check && !['done', 'error'].includes(S.bind.check.step));
+
+  function onBindCheck(check) {
+    const index = BIND_STEPS.indexOf(check.step);
+    if (index >= 0) S.bind.last = index;
+    else if (check.error === 'wrong_button') S.bind.last = BIND_STEPS.indexOf('done');
+    else if (['chat_mode', 'not_connected'].includes(check.error)) S.bind.last = -1; // failed before it began
+    S.bind.check = check;
+    renderBind();
+    renderWizard();
+    if (check.step === 'done' || check.step === 'error') {
+      const shown = S.view === 'wizard' ? (check.step === 'done' ? $('#w-voice-say') : $('#view-wizard [data-bind-result]'))
+        : $('#s-bind-box [data-bind-actions]');
+      if (shown) shown.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  async function startBindCheck() {
+    if (!sameSettings(S.form, S.saved)) {
+      const result = await saveForm();
+      if (!result || !result.ok) return;
+    }
+    S.bind = { check: { step: 'waiting_game' }, last: 0 };
+    $('#s-bind-box').hidden = false;
+    renderBind();
+    call('check_game_binding');
+  }
+
+  function bindRows() {
+    const c = S.bind.check;
+    const label = inSentence(padLabel((S.saved || S.form).ptt_button));
+    const rows = [
+      { text: 'Игра запущена', now: 'Жду Wow.exe. Войди персонажем.' },
+      { text: 'Окно WoW активно', now: 'Переключись в игру, остальное агент сделает сам.' },
+      { text: 'Кнопка передана аддону', now: `Аддон просит нажать кнопку: нажми ${label}.` },
+      { text: 'Аддон перезагрузил интерфейс', now: 'Экран игры мигнёт, это /reload.' },
+      { text: 'Кнопка в игре', now: '' },
+    ];
+    const at = !c ? -1 : c.step === 'error' ? S.bind.last : BIND_STEPS.indexOf(c.step);
+    return rows.map((row, i) => {
+      let mark = 'todo';
+      let { text } = row;
+      let detail = '';
+      if (c && c.step === 'done') {
+        mark = 'ok';
+        if (i === 4 && c.previous) {
+          mark = 'warn';
+          text = `Кнопка была на «${c.previous_name || c.previous}»`;
+          detail = 'Аддон забрал её, пока он включён. Это действие можно перенести на другую кнопку в настройках управления игры.';
+        } else if (i === 4) {
+          text = 'Кнопка была свободна, аддон взял её себе';
+        }
+      } else if (i < at) mark = 'ok';
+      else if (i === at) {
+        mark = c.step === 'error' ? 'bad' : 'now';
+        detail = c.step === 'error' ? '' : row.now;
+      }
+      const ic = mark === 'todo' ? h('span', { class: 'ring' }) : mark === 'now' ? h('span', { class: 'ring now pulse' }) : icon(mark);
+      const color = mark === 'todo' ? 'var(--muted)' : mark === 'bad' ? '#ffb1a5' : 'var(--parch)';
+      return h('li', { class: 'chk' }, h('span', { class: 'ic' }, ic),
+        h('span', { class: 'field', style: 'gap: 1px; min-width: 0' },
+          h('span', { style: `color: ${color}` }, text), detail ? h('span', { class: 'hint' }, detail) : null));
+    });
+  }
+
+  function bindError(c) {
+    const label = inSentence(padLabel((S.saved || S.form).ptt_button));
+    switch (c.error) {
+      case 'addon_missing':
+        return ['Аддон не ответил', 'Проверь, что VoiceForever включён в списке модификаций, и нажми «Проверить ещё раз».'];
+      case 'wrong_button':
+        return ['Нажата другая кнопка', `${c.detail[0].toUpperCase()}${c.detail.slice(1)}. Проверь ещё раз и в игре нажми ${label}.`];
+      case 'no_game_folder':
+        return ['Не нашёл папку игры', 'Аддон всё равно взял кнопку: что на ней было, он написал в чат игры.'];
+      case 'chat_mode':
+        return ['Нужен аддон', 'Проверка работает только в режиме с аддоном.'];
+      case 'not_connected':
+        return ['Сначала сохрани настройки', ''];
+      default:
+        return ['Проверка не закончилась', c.detail ? `${c.detail[0].toUpperCase()}${c.detail.slice(1)}.` : ''];
+    }
+  }
+
+  function renderBind() {
+    if (!S.form) return;
+    const c = S.bind.check;
+    const addon = (S.saved || S.form).mode === 'addon';
+    const running = bindRunning();
+    const rows = bindRows();
+    for (const list of $$('[data-bind-rows]')) {
+      list.hidden = !addon;
+      list.replaceChildren(...rows.map((row) => row.cloneNode(true)));
+    }
+    for (const box of $$('[data-bind-result]')) {
+      box.hidden = !(c && c.step === 'error');
+      if (box.hidden) continue;
+      const [title, detail] = bindError(c);
+      box.className = 'note bad top';
+      box.replaceChildren(icon('bad'), h('div', { class: 'field', style: 'gap: 2px' },
+        h('b', {}, title), detail ? h('span', {}, detail) : null));
+    }
+    for (const actions of $$('[data-bind-actions]')) {
+      actions.hidden = !addon;
+      const run = h('button', { class: 'btn', type: 'button', disabled: running, onclick: startBindCheck },
+        running ? 'Проверяю…' : c ? 'Проверить ещё раз' : 'Проверить в игре');
+      const cancel = h('button', { class: 'link', type: 'button', style: 'align-self: center', onclick: () => call('cancel_game_binding') }, 'Отменить');
+      actions.replaceChildren(...(running ? [run, cancel] : [run]));
+    }
+    $('#w-bind-intro').textContent = addon
+      ? 'Запусти WoW и войди персонажем. Агент передаст кнопку аддону, аддон проверит бинды и перезагрузит интерфейс.'
+      : 'Без аддона проверять нечего: нажатие получит и игра. Убедись, что на этой кнопке в игре ничего нет.';
+
+    const line = $('#s-bind-line');
+    if (!addon) line.textContent = 'Без аддона игра тоже видит эту кнопку.';
+    else if (c && c.step === 'done') {
+      line.textContent = c.previous
+        ? `В игре кнопку держит аддон. Раньше на ней было «${c.previous_name || c.previous}».`
+        : 'В игре кнопку держит аддон, она была свободна.';
+    } else line.textContent = 'В игре кнопку забирает аддон. Проверь, что на ней было.';
+    $('#s-bind-open').hidden = !addon || !$('#s-bind-box').hidden;
+  }
+
   // ------------------------------------------------------------------ wiring
   function bindControls() {
     $('#btn-minimize').addEventListener('click', () => call('minimize'));
     $('#btn-close').addEventListener('click', () => call('close'));
-    for (const tab of $$('.tab')) tab.addEventListener('click', () => showView(tab.dataset.tab));
+    for (const tab of $$('.tab')) {
+      tab.addEventListener('click', () => {
+        showView(tab.dataset.tab);
+        if (tab.dataset.tab === 'settings') loadMics();
+      });
+    }
 
     for (const input of $$('[data-field]')) {
       input.addEventListener('input', () => {
@@ -651,6 +1067,7 @@
       range.addEventListener('input', () => {
         S.form[range.dataset.range] = Number(range.value);
         showRange(range);
+        if (range.dataset.range === 'max_record_s') renderVoice();
         changed();
       });
     }
@@ -673,7 +1090,38 @@
         renderHotkey();
       });
     }
+    for (const select of $$('[data-mic]')) {
+      select.addEventListener('change', () => {
+        S.form.mic_device = select.value;
+        S.micError = '';
+        renderVoice();
+        changed();
+        if (S.micTest) {
+          call('mic_test', true, select.value);
+        }
+      });
+      select.addEventListener('focus', () => { if (S.mics === null || S.micError) loadMics(); });
+    }
+    for (const button of $$('[data-mic-test]')) button.addEventListener('click', () => setMicTest(!S.micTest));
+    for (const button of $$('[data-pad-capture]')) button.addEventListener('click', capturePad);
+    for (const button of $$('[data-pttmode]')) {
+      button.addEventListener('click', () => {
+        S.form.ptt_mode = button.dataset.pttmode;
+        renderVoice();
+        changed();
+      });
+    }
+    $('#s-bind-open').addEventListener('click', () => {
+      $('#s-bind-box').hidden = false;
+      renderBind();
+      if (!bindRunning()) startBindCheck();
+    });
     document.addEventListener('keydown', (e) => {
+      if (S.padCapture && e.code === 'Escape') {
+        e.preventDefault();
+        cancelPadCapture();
+        return;
+      }
       if (!S.capturing) return;
       e.preventDefault();
       e.stopPropagation();
@@ -692,14 +1140,15 @@
 
     $('#w-next').addEventListener('click', wizardNext);
     $('#w-back').addEventListener('click', () => {
+      if (S.wizard.step === 4 && bindRunning()) call('cancel_game_binding');
       S.wizard.step = Math.max(1, S.wizard.step - 1);
       renderWizard();
     });
+    $('#w-later').addEventListener('click', wizardFinish);
     $('#w-skip').addEventListener('click', () => {
       S.wizard.step = 2;
       renderWizard();
     });
-    $('#w-test').addEventListener('click', wizardTest);
 
     $('#st-test').addEventListener('click', () => runTest($('#st-test'),
       (left) => { $('#st-test-hint').textContent = `Жду окно WoW: осталось ${left} с`; },

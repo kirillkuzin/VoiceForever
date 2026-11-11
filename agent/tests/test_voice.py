@@ -235,18 +235,48 @@ async def test_bind_check(setup):
     await until(lambda: [b.step for b in of(events, BindCheck)][-1:] == ["sent"])
     pad.press("rightstick")  # in the game, the addon catches this press
     await until(lambda: of(events, BindCheck)[-1].step == "reloading")
-    saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
-    saved.parent.mkdir(parents=True)
-    saved.write_text(
-        'VoiceForeverDB = {\n["ptt"] = {\n["key"] = "PADRSTICK",\n["previous"] = "TOGGLEPINGLISTENER",\n'
-        f'["mode"] = "toggle",\n["max"] = 30,\n["nonce"] = "{m[1]}",\n}},\n}}\n',
-        encoding="utf-8",
-    )
+    write_result(backend, m[1])
     await until(lambda: of(events, BindCheck)[-1].step == "done")
     result = of(events, BindCheck)[-1]
     assert (result.key, result.previous, result.taken) == ("PADRSTICK", "TOGGLEPINGLISTENER", True)
+    assert result.previous_name == "Метка цели"
     assert [b.step for b in of(events, BindCheck)] == ["waiting_game", "waiting_focus", "sent", "reloading", "done"]
     assert pad.open is None
+
+
+def write_result(backend, nonce: str, key: str = "PADRSTICK") -> None:
+    """What the addon saves after the player pressed the button in the game and it reloaded."""
+    saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
+    saved.parent.mkdir(parents=True, exist_ok=True)
+    name = "".join(f"\\{b}" for b in "Метка цели".encode())  # the game writes UTF-8 as \ddd
+    saved.write_text(
+        f'VoiceForeverDB = {{\n["ptt"] = {{\n["key"] = "{key}",\n["previous"] = "TOGGLEPINGLISTENER",\n'
+        f'["previousName"] = "{name}",\n["mode"] = "toggle",\n["max"] = 30,\n["nonce"] = "{nonce}",\n}},\n}}\n',
+        encoding="utf-8",
+    )
+
+
+async def test_bind_check_notices_another_button(setup):
+    c, pad, backend, events, _, _ = setup
+    c.check_binding()
+    await until(lambda: backend.pastes())
+    nonce = backend.pastes()[0].rsplit(" ", 1)[1]
+    await until(lambda: of(events, BindCheck)[-1].step == "sent")
+    pad.press("leftstick")  # the agent records on the right stick
+    await until(lambda: of(events, BindCheck)[-1].step == "reloading")
+    write_result(backend, nonce, key="PADLSTICK")
+    await until(lambda: of(events, BindCheck)[-1].step == "error")
+    result = of(events, BindCheck)[-1]
+    assert result.error == "wrong_button"
+    assert "Левый стик" in result.detail and "Правый стик" in result.detail
+
+
+async def test_capture_can_be_cancelled(setup):
+    c, *_ = setup
+    waiter = asyncio.create_task(asyncio.to_thread(c.capture_button, 5))
+    await asyncio.sleep(0.1)
+    c.cancel_capture()
+    assert await asyncio.wait_for(waiter, 2) is None
 
 
 async def test_bind_check_needs_addon_mode(setup):
@@ -257,12 +287,13 @@ async def test_bind_check_needs_addon_mode(setup):
     assert of(events, BindCheck)[-1].error == "chat_mode"
 
 
-async def test_addon_gets_a_changed_mode(setup):
+async def test_addon_gets_a_changed_mode(setup, monkeypatch):
+    monkeypatch.setattr(controller_module, "ADDON_REREAD_S", 0.1)  # the agent may look before the file is written
     c, pad, backend, events, _, configure = setup
     saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
     saved.parent.mkdir(parents=True)
     saved.write_text('VoiceForeverDB = { ["ptt"] = { ["key"] = "PADRSTICK", ["mode"] = "toggle", ["max"] = 30 } }')
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.4)
     assert backend.pastes() == []  # the addon already has these settings
     await asyncio.to_thread(configure, ptt_mode=PttMode.HOLD, max_record_s=20)
     await until(lambda: backend.pastes())

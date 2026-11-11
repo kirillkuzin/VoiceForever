@@ -145,9 +145,10 @@ class BindCheck:
 
     step: str
     key: str = ""  # the game's name for the button the addon took, e.g. PADRSTICK
-    previous: str = ""  # what the game had on that button ("" = nothing)
+    previous: str = ""  # what the game had on that button ("" = nothing), e.g. TOGGLEPINGLISTENER
+    previous_name: str = ""  # the same as the game's key bindings window shows it
     taken: bool = False
-    error: str = ""  # addon_missing | timeout | chat_mode | not_connected | no_game_folder
+    error: str = ""  # addon_missing | timeout | chat_mode | not_connected | no_game_folder | wrong_button
     detail: str = ""
 
 

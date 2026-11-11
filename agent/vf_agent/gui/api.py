@@ -160,13 +160,16 @@ class Api:
         """Wait for the next pad press. The page then saves its name as ptt_button."""
         press = self._host.controller.capture_button(float(timeout_s))
         if press is None:
-            return {"button": "", "error": "timeout"}
+            return {"button": "", "error": "timeout"}  # or cancelled from the page
         return {
             "button": press.button,
             "label": button_label(press.button, press.pad.playstation),
             "pad_name": press.pad.name,
             "error": "",
         }
+
+    def cancel_pad_capture(self) -> None:
+        self._host.controller.cancel_capture()
 
     def check_game_binding(self) -> None:
         """Start the in-game check; steps arrive as "bind_check" events."""
