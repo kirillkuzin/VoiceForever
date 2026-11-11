@@ -1,145 +1,67 @@
 # VoiceForever
 
-Голосовой чат для World of Warcraft: Forever. Говоришь в телефон или нажимаешь кнопку на геймпаде, текст появляется в нужном канале игрового чата. Сделано для игры с геймпада, когда печатать неудобно.
+**Speak, and your message appears in the right World of Warcraft: Forever chat channel.**
 
-```
-Telegram (голосовое) ──────────────┐
-кнопка геймпада + микрофон ПК ─────┴→ сервер на VPS: распознавание речи → Claude выбирает канал и правит текст
-  (запись делает агент)               → WebSocket → агент на ПК (Windows) → аддон в WoW → чат
-```
+Press a button on your gamepad, say what you want to write, and VoiceForever types it into the game: to your party, guild or raid, or as a whisper, with the punctuation fixed. No keyboard, no chat window, no picking the channel.
 
-- **Сервер** (`server/`): Telegram-бот, распознавание речи через любой OpenAI-совместимый API, Claude решает, куда отправить фразу, и правит пунктуацию. Docker.
-- **Агент** (`agent/`): маленькая программа для Windows. Держит соединение с сервером и вводит сообщение в окно игры (горячая клавиша, вставка из буфера, Enter). По кнопке геймпада записывает микрофон и отправляет запись на сервер. Память игры не читает.
-- **Аддон** (`addon/VoiceForever`): невидимое поле ввода. Окно чата не открывается, а аддон сам выбирает группу, рейд или подземелье и отвечает на последний шёпот. Пока идёт запись с геймпада, показывает в игре значок записи.
+**[Get VoiceForever →][website]**
 
-## Как это звучит
+<p align="center">
+  <img src="docs/images/agent-status.png" width="360" alt="The VoiceForever app: connected, the game window is active, the last messages went to the party, a whisper and the guild">
+  &nbsp;
+  <img src="docs/images/telegram-card-ask.png" width="255" alt="A message card in Telegram: a whisper waiting to be sent, with channel and name choices">
+</p>
 
-| Говоришь | В чате |
+## Why
+
+WoW Forever plays great on a gamepad, right up until someone asks you something in chat. Answering means putting the controller down, opening the chat, choosing the channel and typing, and in a dungeon there is no time for that. With VoiceForever you answer without letting go of the pad.
+
+## How it works
+
+1. **Press and speak.** Click the right stick (or any button you choose) on an Xbox or DualSense controller and say your message. A recording badge appears in the game. You can also send a voice message to the VoiceForever Telegram bot from your phone.
+2. **VoiceForever works out where it goes.** Your speech becomes text, and Claude, Anthropic's AI, picks the channel from what you said: "tell the party…", "whisper Arthorn…", "reply…", "in trade…". It drops those words, fixes punctuation and recognition slips, and keeps your wording. If you name no channel, it carries on the conversation you were just having.
+3. **It shows up in the game.** The VoiceForever app on your PC hands the message to a small in-game addon, which posts it without opening the chat window. The badge shows where it went.
+
+| You say | In the game chat |
 |---|---|
-| «в пати, иду на босса через минуту» | [Группа/Рейд] Иду на босса через минуту |
-| «скажи в гильдию, что я отойду на пять минут» | [Гильдия] Отойду на 5 минут |
-| «шепни Арторну, где встречаемся» | [Шёпот → Арторн] Где встречаемся? |
-| «ответь ему: уже бегу» | [Шёпот → тот, кто писал последним] Уже бегу |
-| «в трейд продам медную руду» | [Канал 2] Продам медную руду |
-| «ну всё, понял» (только что писал в гильдию) | [Гильдия] Ну всё, понял |
+| "Party, boss in one minute" | [Party] Boss in 1 minute |
+| "Tell the guild I'll be back in five minutes" | [Guild] Back in 5 minutes |
+| "Whisper Arthorn, where are we meeting" | [To Arthorn] Where are we meeting? |
+| "Reply: on my way" | [To whoever whispered last] On my way |
+| "Trade, selling copper ore" | [2. Trade] Selling copper ore |
+| "Okay, got it" (right after writing to the guild) | [Guild] Okay, got it |
 
-Без явного канала Claude продолжает разговор в том канале, где ты писал последние 5 минут, иначе берёт канал по умолчанию (`/channel`).
+## What you get
 
-## Установка
+- **A Windows app** that sits in the tray while you play. It shows whether it is connected, sees your gamepad even when the game is in the background, and lists your last messages with a mark for each one that reached the game. Setup takes four steps: server, mode, voice and a check in the game.
+- **An in-game addon.** The chat window never opens: the addon picks party, raid or instance chat by itself, replies to the last whisper and shows a recording badge.
+- **A Telegram bot** for voice messages from your phone. Every message gets a card with its channel and delivery status, and a pinned panel holds your default channel, confirmation, message style and language.
 
-Готовые сборки:
+The app, the bot and the addon speak English, Russian, German, Spanish and French, and start in the language of your Windows, Telegram app and game client.
 
-- сервер: Docker-образ `ghcr.io/kirillkuzin/voiceforever-server`;
-- агент и аддон: `VoiceForeverAgent.exe` и `VoiceForever-addon-<версия>.zip` на странице [Releases](https://github.com/kirillkuzin/VoiceForever/releases).
+<p align="center">
+  <img src="docs/images/agent-wizard-voice.png" width="300" alt="First-run setup, step 3: choosing the microphone and the gamepad button">
+  &nbsp;
+  <img src="docs/images/telegram-panel.png" width="255" alt="The pinned control panel in Telegram">
+</p>
 
-### 1. Сервер (VPS)
+## Get started
 
-Пошагово, включая свой Whisper и TLS: [docs/server.md](docs/server.md). Коротко:
+Downloads and everything you need to start are on **[the VoiceForever website][website]**.
 
-1. Скачай `docker-compose.yml` и `.env.example` (как `.env`).
-2. Заполни в `.env` токен бота от [@BotFather](https://t.me/BotFather), `VF_USERS` (`<Telegram ID>:<токен агента>`), ключ Claude и распознавание речи.
-3. `docker compose pull && docker compose up -d`.
-4. Поставь перед сервером TLS (например Caddy) и дай агенту адрес `wss://<домен>/ws`.
+### Host it yourself
 
-### 2. Аддон
+You can also run the whole thing on your own server, with your own keys for Telegram, speech recognition and Claude. The [self-hosting guide](docs/README.md) covers the server, the addon and the app, and how to build them from source.
 
-Скопируй папку `addon/VoiceForever` в `Interface\AddOns` папки WoW Forever. Аддон собран под интерфейс 16001. Если после патча игра пишет «устарел», включи «Загружать устаревшие модификации» или поставь в `VoiceForever.toc` номер из `/dump select(4, GetBuildInfo())`.
+## Fair play
 
-В игре: `/vf` покажет клавишу агента (по умолчанию `CTRL-SHIFT-F12`), `/vf test` отправит тест в группу, `/vf ptt` покажет кнопку записи голоса, `/vf ptt off` вернёт её игре.
+- The app types only when the WoW window is active, and only what you said. It does not read or change game memory and automates nothing in gameplay.
+- A voice message cannot run a game command: VoiceForever strips a leading `/` or `.` and the `|` character from every message.
+- Blizzard's rules forbid automating gameplay. Typing your own words is close to Windows voice typing, but Blizzard has not officially approved tools like this. Use it at your own risk.
 
-### 3. Агент (Windows 10 или 11, 64 бит)
+## License
 
-Скачай `VoiceForeverAgent.exe` со страницы [Releases](https://github.com/kirillkuzin/VoiceForever/releases) и запусти. Exe не подписан, поэтому Windows может показать SmartScreen: «Подробнее» → «Выполнить в любом случае». Контрольные суммы лежат в `SHA256SUMS.txt` рядом с exe.
+[MIT](LICENSE)
 
-Агент открывается в своём окне. При первом запуске мастер из четырёх шагов спросит адрес сервера `wss://<домен>/ws` и токен (тот, что в `VF_USERS`) и сразу проверит подключение, предложит выбрать режим ввода, затем микрофон и кнопку записи на геймпаде, и в конце проверит кнопку в игре. Дальше в окне две вкладки:
-
-- **Статус**: подключён ли агент, кнопки «Отключить», «Переподключить» и «Подключить», видна ли игра, геймпад и идёт ли запись, последние сообщения с отметкой, дошли ли они.
-- **Настройки**: всё из `config.toml` (сервер, токен, режим, клавиша аддона, голос, окно игры, задержки ввода). Пояснения к настройкам открываются по значку ⓘ рядом с названием. Кнопка «Определить автоматически» сама находит окно и процесс WoW. Если поменять адрес, токен или режим, агент переподключится сам.
-
-#### Голос с геймпада
-
-Подходят Xbox и DualSense (по USB или Bluetooth), агент видит их и когда окно игры в фоне. По умолчанию запись включает нажатие правого стика:
-
-- «Переключение» (`ptt_mode = "toggle"`): нажми, говори, нажми ещё раз. Дольше `max_record_s` (30 с) запись не идёт, потом уходит сама.
-- «Удержание» (`ptt_mode = "hold"`): говоришь, пока держишь кнопку.
-
-Запись начинается, только когда окно WoW активно. Короче 0,3 с запись считается случайным нажатием и никуда не уходит. Агент коротко пищит в начале и в конце (`ptt_sounds`), значок в трее на время записи краснеет, а аддон рисует в игре значок «Запись», потом «Распознаю…» и куда ушёл текст. Значок можно перетащить мышью.
-
-Кнопку забирает себе аддон: в WoW Forever на правом стике стоят метки, и без этого игра ставила бы метку при каждой записи. Последний шаг мастера («Проверка в игре», он же «Проверить в игре» в настройках) передаёт кнопку аддону: в игре появится просьба нажать её, аддон запомнит, что на ней было, и перезагрузит интерфейс, а агент покажет результат. Прежнее действие можно перенести на другую кнопку в настройках управления игры. Без аддона (`mode = "chat"`) игра получает нажатие тоже, поэтому выбери кнопку, на которой в игре ничего нет.
-
-Распознаёт речь сервер, тем же способом, что и голосовые из Telegram, и Claude так же выбирает канал. Сервер принимает запись не длиннее `VF_MAX_VOICE_S` (60 с).
-
-Геймпад и микрофон агент читает через [SDL3](https://libsdl.org) (лицензия zlib), `SDL3.dll` уже внутри exe. Запись с геймпада работает в окне агента; `--headless` её не включает.
-
-Крестик убирает окно в трей, агент остаётся на связи. Значок в трее показывает состояние цветом, по правой кнопке есть меню, при потере связи приходит уведомление. Второй запуск exe просто откроет уже работающее окно. Можно включить запуск вместе с Windows: тогда агент стартует свёрнутым в трей.
-
-Окну нужен Microsoft Edge WebView2 Runtime. В Windows 11 он уже есть, в Windows 10 обычно ставится вместе с Edge; если его нет, агент скажет, где скачать.
-
-Настройки лежат в `%APPDATA%\VoiceForever\config.toml` (или рядом с exe, если `config.toml` уже лежит там), журнал в `agent.log` в той же папке. Файл можно править и руками.
-
-Без окна: `VoiceForeverAgent.exe --headless` работает как раньше, с журналом в консоли. `--test` пишет тестовую строку в /say и выходит, `--config <путь>` задаёт другой файл настроек.
-
-Из исходников нужен [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`), он сам скачает Python 3.15 и точные версии библиотек из `agent/uv.lock`: `cd agent && uv run python -m vf_agent`. Для голоса положи `SDL3.dll` из [`SDL3-3.4.8-win32-x64.zip`](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.8) в папку `agent` (или укажи путь в переменной `VF_SDL3`). Собрать exe самому: `agent\build.bat` → `agent\dist\VoiceForeverAgent.exe`.
-
-Без аддона выбери режим «Обычный чат» (`mode = "chat"`): агент будет открывать обычный чат и печатать `/p`, `/g`, `/w`.
-
-## Команды бота
-
-| Команда | Что делает |
-|---|---|
-| `/status` | подключён ли агент, текущие настройки |
-| `/channel пати\|гильдия\|сказать\|рейд` | канал по умолчанию |
-| `/confirm on\|off` | показывать текст с кнопками перед отправкой |
-| `/style как орк-шаман` | переписывать сообщения в стиле (или «переводи на английский»); `/style off` |
-| `/names Арторн, Лиана` | ники, которые часто называешь (помогает распознаванию) |
-| `/panel` | закрепить пульт: агент на связи или нет, канал, подтверждение, стиль |
-| `/widgets on\|off` | карточки и пульт или обычные текстовые кнопки |
-
-Можно писать боту и текстом: это удобно для проверки.
-
-### Виджеты в Телеграме
-
-Бот показывает ответы HTML-виджетами прямо в чате (Bot API 10.4, пока только в личке с ботом):
-
-- **Карточка сообщения** под каждым голосовым: фраза в цвете канала игры, выбор канала и ника для шёпота, статус «отправляю», «в игре» или «не ушло» с кнопкой «Повторить». Чтобы исправить текст, ответь на карточку голосом или текстом.
-- **Пульт** (`/panel`) закрепляется вверху чата и сам обновляется, когда агент подключается или отключается.
-- **Проверка установки** приходит на `/start`: бот узнал тебя, агент на связи, тестовая строка в игре, первое голосовое.
-
-Если твоё приложение Телеграма не показывает виджеты, выключи их командой `/widgets off`: бот вернётся к тексту с кнопками.
-
-## Распознавание речи
-
-Любой сервис с OpenAI-совместимым `/audio/transcriptions`:
-
-| Вариант | `VF_STT_BASE_URL` | `VF_STT_MODEL` |
-|---|---|---|
-| OpenAI (по умолчанию) | `https://api.openai.com/v1` | `gpt-4o-mini-transcribe` или `gpt-4o-transcribe` |
-| Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3-turbo` |
-| Свой сервер (speaches / faster-whisper) | `http://speaches:8000/v1` | `Systran/faster-whisper-large-v3` |
-
-## Claude
-
-По умолчанию `claude-opus-5-5` с `effort=low`. Включены серверные fallbacks на случай отказа модели. Если Claude недоступен или ответил не по формату, сработает простой разбор по ключевым словам («в пати…», «шепни…»), и сообщение всё равно уйдёт.
-
-Модель меняется в `VF_LLM_MODEL`. Для хостинговой версии с подпиской стоит сравнить цену и задержку с `claude-haiku-5-5`.
-
-## Безопасность и правила игры
-
-- Агент нажимает клавиши только когда окно WoW активно, только по твоему голосовому сообщению. Он не читает и не меняет память игры и ничего не автоматизирует в геймплее.
-- Сервер и агент убирают из текста `|` и ведущие `/` и `.`, поэтому из голосового нельзя выполнить команду.
-- Бот отвечает только пользователям из `VF_USERS`, агент подключается по секретному токену.
-- Правила Blizzard запрещают автоматизацию игрового процесса. Ввод сказанного тобой текста похож на голосовой ввод Windows, но официального разрешения на такие программы нет. Используй на свой риск.
-
-## Разработка
-
-Python 3.15, зависимости через uv.
-
-```
-cd server && uv run pytest
-cd agent && uv run pytest
-cd addon && uv run --no-project --python 3.13 --with lupa --with pytest pytest   # аддон гоняется в Lua 5.1 с заглушками WoW API
-```
-
-## Лицензия
-
-MIT
+<!-- TODO: replace with the real website address once the domain is registered. -->
+[website]: https://voiceforever.example
