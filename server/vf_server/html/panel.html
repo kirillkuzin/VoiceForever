@@ -1,0 +1,53 @@
+<style>
+body{margin:0;font:15px/1.4 system-ui,sans-serif;color:#ece1c8;background:radial-gradient(120% 70% at 50% 0,#2b2118,#18120d 60%,#0e0b08)}
+#r{position:relative;display:flex;flex-direction:column;gap:12px;padding:12px 14px 14px;box-shadow:inset 0 0 0 1px #000,inset 0 0 0 2px #7d6130,inset 0 0 0 4px #0b0907,inset 0 0 0 5px rgba(220,181,99,.28)}
+#r::before{content:"";position:absolute;inset:3px;pointer-events:none;background:radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 0 0/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 100% 0/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 0 100%/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 100% 100%/9px 9px no-repeat}
+.h,.sh{display:flex;align-items:center;gap:8px;font:700 18px/1.2 serif;font-variant:small-caps;letter-spacing:.06em;color:#dcb563}
+.sh{font-size:15px}
+.h i{flex:1;height:1px;background:linear-gradient(90deg,#7d6130,transparent)}
+.hn{font-size:13px;line-height:1.35;color:#a89a7e}
+.sp{height:1px;background:rgba(125,97,48,.45)}
+.st{display:flex;align-items:center;gap:14px}
+.o{width:40px;height:40px;flex:none;border-radius:50%;box-shadow:0 0 0 2px #0b0907,0 0 0 4px #7d6130,0 0 0 5px #000}
+.ot{font:700 22px/1.1 serif;font-variant:small-caps}
+.g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+button{min-height:44px;border-radius:4px;font:700 14px system-ui,sans-serif;cursor:pointer}
+.c{display:flex;align-items:center;justify-content:center;gap:6px;padding:0 4px;color:#b5a688;background:linear-gradient(#30261c,#19130e);border:1px solid #4a3a20}
+.c.on{color:#ece1c8;border-color:#dcb563;background:linear-gradient(rgba(220,181,99,.22),rgba(220,181,99,.06))}
+.c.w{border-color:#dcb563;animation:p .8s ease-in-out infinite}
+.c[disabled]{opacity:.5}
+.c:active{filter:brightness(1.3)}
+@keyframes p{50%{filter:brightness(1.5)}}
+.d{width:8px;height:8px;flex:none;border-radius:50%}
+.a{align-self:flex-start;min-height:0;padding:0;border:0;background:none;font:500 13px system-ui,sans-serif;color:#e8c46e;text-decoration:underline}
+.sw{display:flex;align-items:center;gap:12px;padding:0;text-align:left;font:500 15px system-ui,sans-serif;color:#ece1c8;background:none;border:0}
+.t{position:relative;width:40px;height:22px;flex:none;border-radius:11px;background:#0a0806;border:1px solid #7d6130}
+.t::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#6d5f4a;transition:left .15s}
+.t.on{background:#3b2a12;border-color:#dcb563}
+.t.on::after{left:21px;background:#dcb563}
+.sa{padding-right:var(--tg-content-safe-area-corner-right,52px)}
+</style>
+<div id="r"></div>
+<script>
+var W=window.TelegramWidget,R=document.querySelector('#r'),d={},w='',more=0,
+C={say:['Сказать','#f3eee6'],group:['Группа','#aab4ff'],guild:['Гильдия','#56e06a'],raid:['Рейд','#ff9c5a'],yell:['Крик','#ff5c5c'],instance:['Подземелье','#ff9c5a'],officer:['Офицеры','#40c860'],emote:['Эмоция','#ff9c5a']},
+S=[['off','Как есть','Правлю только пунктуацию.'],['short','Коротко','Убираю лишние слова.'],['rp','Ролевой','Пишу в духе персонажа.'],['custom','Свой','']];
+function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
+function hm(t){var x=new Date(t*1e3);return('0'+x.getHours()).slice(-2)+':'+('0'+x.getMinutes()).slice(-2)}
+function load(){d=JSON.parse(W.chatData||'{}');w='';draw()}
+function chip(k){var c=C[k];return'<button class="c'+(w=='c:'+k?' w':d.c==k?' on':'')+'" onclick="go(\'c:'+k+'\')"><span class="d" style="background:'+c[1]+'"></span>'+c[0]+'</button>'}
+function draw(){
+var on=d.on,h='<div class="h">VoiceForever<i></i><span style="font:500 12px system-ui,sans-serif;color:#a89a7e">пульт</span></div>';
+h+='<div class="st"><span class="o" style="background:radial-gradient(circle at 36% 30%,rgba(255,255,255,.75) 0 7%,'+(on?'#5ed474 34%,#1d6b2c':'#a59a88 34%,#3a342b')+' 100%)"></span><div><div class="ot" style="color:'+(on?'#5ed474':'#a59a88')+'">'+(on?'Агент на связи':'Агент не подключён')+'</div><div class="hn">'+(on?'Агент '+e(d.v)+' на ПК, '+(d.md=='chat'?'обычный чат':'режим аддона')+(d.since?'. С '+hm(d.since)+'.':'.'):'Голосовые не дойдут до игры. Запусти VoiceForever Agent на ПК.')+'</div></div></div><div class="sp"></div>';
+h+='<div class="sh">Канал по умолчанию</div><div class="g">'+['say','group','guild','raid'].map(chip).join('')+'</div>';
+h+=more||['yell','instance','officer','emote'].indexOf(d.c)>=0?'<div class="g">'+['yell','instance','officer','emote'].map(chip).join('')+'</div>':'<button class="a" onclick="more=1;draw()">Ещё каналы</button>';
+h+='<div class="hn">Куда идёт фраза, если по смыслу канал не понятен.</div><div class="sp"></div>';
+h+='<button class="sw" onclick="go(\'f:'+(d.cf?0:1)+'\')"><span class="t'+(d.cf?' on':'')+'"></span><span><span>Спрашивать перед отправкой</span><br><span class="hn">'+(d.cf?'Сначала карточка с кнопкой «Отправить».':'Фраза сразу уходит в игру.')+'</span></span></button><div class="sp"></div>';
+h+='<div class="sh">Стиль сообщений</div>';
+if(!d.tr)h+='<div class="hn sa">Переписывание выключено на этом сервере, правлю только пунктуацию.</div>';
+else{var hint='';h+='<div class="g">'+S.map(function(s){if(d.st==s[0])hint=s[2]||'Сейчас: «'+e(d.cs)+'».';return'<button class="c'+(w=='y:'+s[0]?' w':d.st==s[0]?' on':'')+'"'+(s[0]=='custom'&&!d.cs?' disabled':'')+' onclick="go(\'y:'+s[0]+'\')">'+s[1]+'</button>'}).join('')+'</div>';
+h+='<div class="hn sa">'+hint+' Свой стиль: /style как орк-шаман. Ники: '+(e(d.n)||'нет')+' (/names).</div>'}
+R.innerHTML=h}
+function go(q){w=q;draw();W.request(q).then(function(){},function(){w='';draw()})}
+W.onEvent('chatDataChanged',load);load();if(W.ready)W.ready()
+</script>

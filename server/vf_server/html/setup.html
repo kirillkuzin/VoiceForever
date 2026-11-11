@@ -1,0 +1,55 @@
+<style>
+body{margin:0;font:15px/1.4 system-ui,sans-serif;color:#ece1c8;background:radial-gradient(120% 70% at 50% 0,#2b2118,#18120d 60%,#0e0b08)}
+#r{position:relative;display:flex;flex-direction:column;gap:12px;padding:12px 14px 14px;box-shadow:inset 0 0 0 1px #000,inset 0 0 0 2px #7d6130,inset 0 0 0 4px #0b0907,inset 0 0 0 5px rgba(220,181,99,.28)}
+#r::before{content:"";position:absolute;inset:3px;pointer-events:none;background:radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 0 0/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 100% 0/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 0 100%/9px 9px no-repeat,radial-gradient(circle,#dcb563 0 2.4px,transparent 3px) 100% 100%/9px 9px no-repeat}
+.h{display:flex;align-items:center;gap:8px;font:700 18px/1.2 serif;font-variant:small-caps;letter-spacing:.06em;color:#dcb563}
+.h i{flex:1;height:1px;background:linear-gradient(90deg,#7d6130,transparent)}
+.pl{padding:2px 9px;border:1px solid;border-radius:10px;font:700 12px/1.3 system-ui,sans-serif;font-variant:normal;letter-spacing:0;background:rgba(0,0,0,.35)}
+.pg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.sg{height:6px;border-radius:3px;background:#0a0806;border:1px solid #4a3a20}
+.sg.on{background:linear-gradient(90deg,#c99a3f,#ffe3a1);border-color:#dcb563}
+.s{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding-top:8px;border-top:1px solid rgba(125,97,48,.35)}
+.s:first-of-type{padding-top:0;border:0}
+.s>div{display:flex;flex-direction:column;gap:6px}
+.k{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:700;font-size:14px;color:#b5a688;background:#0f0b08;border:1px solid #7d6130}
+.k.on{color:#1a120a;background:radial-gradient(circle at 40% 35%,#ffe3a1,#c99a3f);border-color:#ffe1a0}
+.k.ok{color:#5ed474;border-color:rgba(94,212,116,.6);background:#10200f}
+.tt{font-weight:700}
+.hn{font-size:13px;line-height:1.35;color:#a89a7e}
+.r{display:flex;align-items:center;gap:8px}
+button{min-height:44px;padding:0 14px;border-radius:4px;font:700 15px system-ui,sans-serif;color:#ffd77a;cursor:pointer;border:1px solid #1d0603;background:linear-gradient(#b9331f,#82180d 55%,#5f0f08);box-shadow:0 0 0 1px #7d6130,inset 0 1px 0 rgba(255,190,130,.45)}
+button.gh{color:#ece1c8;border-color:#000;background:linear-gradient(#30261c,#19130e)}
+button:active{filter:brightness(1.3)}
+.n{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid rgba(242,173,66,.45);border-radius:3px;font-size:14px;color:#fbe4bd;background:rgba(0,0,0,.35)}
+.dt{width:10px;height:10px;flex:none;border-radius:50%;background:#f2ad42;animation:p 1.2s ease-in-out infinite}
+@keyframes p{50%{filter:brightness(1.6)}}
+.sa{padding-right:var(--tg-content-safe-area-corner-right,52px)}
+</style>
+<div id="r"></div>
+<script>
+var W=window.TelegramWidget,R=document.querySelector('#r'),d={};
+function e(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
+function load(){d=JSON.parse(W.chatData||'{}');draw()}
+function wait(t){return'<div class="r"><span class="dt"></span><span class="hn">'+t+'</span></div>'}
+function draw(){
+var t=d.t||'',ok=[1,d.on||t=='ok',t=='ok',!!d.vc],n=0,cur=0;
+ok.forEach(function(x,i){if(x)n++;else if(!cur)cur=i+1});
+var h='<div class="h">Проверка установки<i></i><span class="pl" style="color:'+(cur?'#f2ad42':'#5ed474')+'">'+(cur?n+' из 4':'готово')+'</span></div><div class="pg">'+ok.map(function(x){return'<span class="sg'+(x?' on':'')+'"></span>'}).join('')+'</div>';
+var S=[['Бот тебя узнал','','Твой Telegram ID есть в списке пользователей сервера.'],
+['Агент на ПК','Запусти VoiceForever Agent на игровом ПК. Пункт отметится сам.','Агент '+e(d.v)+' на связи, '+(d.md=='chat'?'обычный чат.':'режим аддона.')],
+['Тест в игре','Зайди в игру и нажми кнопку: в /say уйдёт строка «VoiceForever test».','Строка дошла до чата игры.'],
+['Первое голосовое','Отправь голосовое, например: «в гильдию, всем привет».','Ушло: '+e(d.vc)]];
+S.forEach(function(s,i){
+var me=cur==i+1,x='';
+if(me&&i==1)x=wait('Жду агента…')+(d.dl?'<button class="gh" style="align-self:flex-start" onclick="W.openLink(d.dl)">Скачать агент</button>':'');
+if(me&&i==2){
+if(t=='busy')x='<div class="n"><span class="dt"></span>Жду окно WoW…</div>';
+else if(t=='ask')x='<b>Видишь «VoiceForever test» в чате игры?</b><div class="r"><button style="flex:1" onclick="go(\'ty\')">Вижу</button><button class="gh" style="flex:1" onclick="go(\'tn\')">Не появилось</button></div>';
+else x=(t=='help'?'<div class="n">Проверь, что аддон VoiceForever включён в списке модификаций, и нажми тест ещё раз.</div>':t=='fail'?'<div class="n">'+e(d.e)+'</div>':'')+'<button style="align-self:flex-start" onclick="go(\'t\')">'+(t?'Ещё раз':'Отправить тест')+'</button>'}
+if(me&&i==3)x=wait('Жду голосовое в этом чате…');
+h+='<div class="s"><span class="k'+(ok[i]?' ok':me?' on':'')+'">'+(ok[i]?'✓':i+1)+'</span><div><span class="tt"'+(ok[i]||me?'':' style="color:#b5a688"')+'>'+s[0]+'</span><span class="hn">'+(ok[i]?s[2]:s[1])+'</span>'+x+'</div></div>'});
+if(!cur)h+='<div class="n sa" style="border-color:rgba(94,212,116,.45);color:#d2f4d8">✓ Всё работает. Пульт закреплён вверху чата.</div>';
+R.innerHTML=h}
+function go(q){if(q=='t'){d.t='busy';draw()}W.request(q).then(function(){},function(){})}
+W.onEvent('chatDataChanged',load);load();if(W.ready)W.ready()
+</script>

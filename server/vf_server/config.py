@@ -55,6 +55,8 @@ class Settings:
     ack_timeout_s: float = 30.0
     db_path: str = "/data/voiceforever.db"
     known_names: tuple[str, ...] = ()
+    # "Download the agent" button in the setup checklist the bot shows on /start.
+    agent_download_url: str = "https://github.com/kirillkuzin/VoiceForever/releases/latest"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Self:
@@ -85,4 +87,5 @@ class Settings:
             known_names=tuple(
                 n.strip() for n in env.get("VF_KNOWN_NAMES", "").split(",") if n.strip()
             ),
+            agent_download_url=env.get("VF_AGENT_DOWNLOAD_URL", defaults.agent_download_url),
         )

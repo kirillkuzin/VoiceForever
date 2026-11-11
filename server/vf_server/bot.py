@@ -5,7 +5,7 @@ import itertools
 import logging
 from collections import OrderedDict
 
-from aiogram import Bot, F, Router
+from aiogram import Bot, Dispatcher, F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -14,6 +14,8 @@ from .hub import AckStatus
 from .router import Decision
 from .service import Delivery, VoiceService
 from .stt import TranscriptionError
+from .tgwidgets import WIDGET_UPDATE_TYPES, WidgetQueryMiddleware
+from .widgets import ACK_TEXT, DEFAULT_CHANNELS, STYLE_PRESETS, WidgetUI
 
 log = logging.getLogger(__name__)
 
@@ -23,15 +25,7 @@ CHANNEL_ALIASES: frozendict[str, Channel] = frozendict({
     "гильдия": Channel.GUILD, "гильдию": Channel.GUILD, "ги": Channel.GUILD,
     "офицеры": Channel.OFFICER, "сказать": Channel.SAY, "крик": Channel.YELL,
 })
-DEFAULT_CHANNEL_CHOICES = frozenset(Channel) - {Channel.WHISPER, Channel.CHANNEL, Channel.REPLY}
 QUICK_CHANNELS = (Channel.SAY, Channel.GROUP, Channel.GUILD)
-
-ACK_TEXT: frozendict[AckStatus, str] = frozendict({
-    AckStatus.OFFLINE: "Агент на ПК не подключён. Запусти VoiceForever Agent.",
-    AckStatus.NOT_FOCUSED: "Окно WoW не было активным, сообщение не отправлено.",
-    AckStatus.TIMEOUT: "Агент не ответил вовремя. Проверь, отправилось ли сообщение.",
-    AckStatus.ERROR: "Агент не смог ввести текст",
-})
 
 HELP = (
     "Отправь голосовое, и я напечатаю его в чат WoW.\n\n"
@@ -42,7 +36,9 @@ HELP = (
     "/channel пати|гильдия|сказать|рейд — канал по умолчанию\n"
     "/confirm on|off — спрашивать перед отправкой\n"
     "/style <как писать> — переписывать сообщения (например: «как орк-шаман»), /style off — выключить\n"
-    "/names Арторн, Лиана — ники, которые часто называешь"
+    "/names Арторн, Лиана — ники, которые часто называешь\n"
+    "/panel — закрепить пульт с настройками\n"
+    "/widgets on|off — карточки и пульт или обычные кнопки"
 )
 
 
@@ -95,13 +91,13 @@ def describe(delivery: Delivery) -> str:
     return f"⚠️ {base}{detail}\n[{msg.label()}] {msg.text}"
 
 
-def build_router(service: VoiceService, allowed: set[int]) -> Router:
+def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Router:
     router = Router()
     pending = PendingMessages()
     allowed_filter = F.from_user.id.in_(allowed)
 
     @router.message(Command("start", "help"))
-    async def start(message: Message) -> None:
+    async def start(message: Message, bot: Bot, command: CommandObject) -> None:
         user = message.from_user
         if user is None or user.id not in allowed:
             uid = user.id if user else "?"
@@ -109,7 +105,29 @@ def build_router(service: VoiceService, allowed: set[int]) -> Router:
                 f"Твой Telegram ID: {uid}. Добавь его в VF_USERS на сервере, чтобы пользоваться ботом."
             )
             return
+        if command.command == "start" and ui.enabled(user.id):
+            if await ui.send_setup(bot, message.chat.id, user.id):
+                return
         await message.answer(HELP)
+
+    @router.message(Command("panel"), allowed_filter)
+    async def panel(message: Message, bot: Bot) -> None:
+        if not ui.enabled(message.from_user.id):
+            await message.answer("Виджеты выключены. Включить: /widgets on")
+        elif not await ui.send_panel(bot, message.chat.id, message.from_user.id):
+            await message.answer(
+                "Телеграм не принял пульт. Обнови приложение или выключи виджеты: /widgets off"
+            )
+
+    @router.message(Command("widgets"), allowed_filter)
+    async def set_widgets(message: Message, command: CommandObject) -> None:
+        on = (command.args or "").strip().lower() not in {"off", "выкл", "0", "нет"}
+        service.store.update_ui(message.from_user.id, widgets=on)
+        await message.answer(
+            "Виджеты включены: карточки сообщений, пульт /panel, проверка установки /start."
+            if on
+            else "Виджеты выключены: сообщения с обычными кнопками, как раньше."
+        )
 
     @router.message(Command("status"), allowed_filter)
     async def status(message: Message) -> None:
@@ -128,38 +146,44 @@ def build_router(service: VoiceService, allowed: set[int]) -> Router:
         )
 
     @router.message(Command("channel"), allowed_filter)
-    async def set_channel(message: Message, command: CommandObject) -> None:
+    async def set_channel(message: Message, command: CommandObject, bot: Bot) -> None:
         arg = (command.args or "").strip().lower()
         channel = CHANNEL_ALIASES.get(arg) or (Channel(arg) if arg in Channel else None)
-        if channel not in DEFAULT_CHANNEL_CHOICES:
+        if channel not in DEFAULT_CHANNELS:
             await message.answer("Например: /channel пати, /channel гильдия, /channel сказать")
             return
         service.store.update(message.from_user.id, default_channel=channel)
         await message.answer(f"Канал по умолчанию: {LABELS[channel]}")
+        await ui.refresh_panel(bot, message.from_user.id)
 
     @router.message(Command("confirm"), allowed_filter)
-    async def set_confirm(message: Message, command: CommandObject) -> None:
+    async def set_confirm(message: Message, command: CommandObject, bot: Bot) -> None:
         on = (command.args or "").strip().lower() in {"on", "вкл", "1", "да"}
         service.store.update(message.from_user.id, confirm=on)
         await message.answer(f"Подтверждение перед отправкой: {'вкл' if on else 'выкл'}")
+        await ui.refresh_panel(bot, message.from_user.id)
 
     @router.message(Command("style"), allowed_filter)
-    async def set_style(message: Message, command: CommandObject) -> None:
+    async def set_style(message: Message, command: CommandObject, bot: Bot) -> None:
         if service.router is None or not service.router.allow_transform:
             await message.answer("Переписывание сообщений выключено на этом сервере.")
             return
         arg = (command.args or "").strip()
         style = "" if arg.lower() in {"", "off", "выкл"} else arg[:300]
         service.store.update(message.from_user.id, rewrite_style=style)
+        if style and style not in STYLE_PRESETS.values():
+            service.store.update_ui(message.from_user.id, custom_style=style)
         await message.answer(
             f"Стиль: {style}" if style else "Стиль выключен, правлю только пунктуацию."
         )
+        await ui.refresh_panel(bot, message.from_user.id)
 
     @router.message(Command("names"), allowed_filter)
-    async def set_names(message: Message, command: CommandObject) -> None:
+    async def set_names(message: Message, command: CommandObject, bot: Bot) -> None:
         names = ", ".join(n.strip() for n in (command.args or "").split(",") if n.strip())
         service.store.update(message.from_user.id, known_names=names[:500])
         await message.answer(f"Ники: {names or '—'}")
+        await ui.refresh_panel(bot, message.from_user.id)
 
     @router.message(allowed_filter, F.voice | F.audio | F.video_note)
     async def on_voice(message: Message, bot: Bot) -> None:
@@ -183,20 +207,28 @@ def build_router(service: VoiceService, allowed: set[int]) -> Router:
         if not transcript:
             await message.reply("Не расслышал ни слова.")
             return
-        await handle_phrase(message, transcript)
+        await handle_phrase(message, transcript, bot)
 
     @router.message(allowed_filter, F.text, ~F.text.startswith("/"))
-    async def on_text(message: Message) -> None:
-        await handle_phrase(message, message.text)
+    async def on_text(message: Message, bot: Bot) -> None:
+        await handle_phrase(message, message.text, bot)
 
-    async def handle_phrase(message: Message, transcript: str) -> None:
+    async def handle_phrase(message: Message, transcript: str, bot: Bot) -> None:
         uid = message.from_user.id
+        widgets = ui.enabled(uid)
+        card = ui.card_for_reply(message) if widgets else None
         result = await service.route(uid, transcript)
         note = f"\n({result.note})" if result.note else ""
         if result.decision is Decision.SKIP:
             await message.reply(f"Пропустил, не похоже на сообщение в чат: «{transcript}»")
             return
-        if service.store.get(uid).confirm:
+        if card is not None:  # a reply to a card replaces the card's text
+            await ui.correct_card(bot, card, result.message, transcript)
+            return
+        confirm = service.store.get(uid).confirm
+        if widgets and await ui.show_card(bot, message, result.message, transcript, confirm):
+            return
+        if confirm:
             pid = pending.add(uid, result.message)
             await message.reply(
                 f"[{result.message.label()}] {result.message.text}{note}",
@@ -205,9 +237,10 @@ def build_router(service: VoiceService, allowed: set[int]) -> Router:
             return
         delivery = await service.deliver(uid, result.message)
         await message.reply(describe(delivery) + note)
+        await ui.note_delivery(bot, uid, delivery)
 
     @router.callback_query(F.data.startswith("vf:"), allowed_filter)
-    async def on_button(query: CallbackQuery) -> None:
+    async def on_button(query: CallbackQuery, bot: Bot) -> None:
         match (query.data or "").split(":"):
             case ["vf", action, pid, *rest]:
                 pass
@@ -233,6 +266,25 @@ def build_router(service: VoiceService, allowed: set[int]) -> Router:
                 pending.pop(pid)
                 delivery = await service.deliver(query.from_user.id, msg)
                 await query.message.edit_text(describe(delivery))
+                await ui.note_delivery(bot, query.from_user.id, delivery)
         await query.answer()
 
+    @router.startup()
+    async def on_startup(bot: Bot) -> None:
+        ui.start(bot)
+
+    @router.shutdown()
+    async def on_shutdown() -> None:
+        await ui.stop()
+
     return router
+
+
+def setup_bot(
+    dp: Dispatcher, service: VoiceService, allowed: set[int], download_url: str = ""
+) -> list[str]:
+    """Wire the bot into the dispatcher. Returns allowed_updates for polling."""
+    ui = WidgetUI(service, allowed, download_url)
+    dp.include_router(build_router(service, allowed, ui))
+    dp.update.outer_middleware(WidgetQueryMiddleware(ui.on_query))
+    return [*dp.resolve_used_update_types(), *WIDGET_UPDATE_TYPES]
