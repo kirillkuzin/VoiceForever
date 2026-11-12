@@ -3,7 +3,7 @@ name = "voiceforever-agent"
 version = "0.3.0"
 description = "Types VoiceForever messages into the World of Warcraft chat (Windows 10/11)"
 requires-python = ">=3.15"
-license = "MIT"
+license = "AGPL-3.0-only"
 dependencies = ["websockets>=17.4", "pywebview>=6.2.1; sys_platform == 'win32'"]
 
 [dependency-groups]
