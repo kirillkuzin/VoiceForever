@@ -135,7 +135,7 @@ def agent_state(first_run: bool) -> dict:
         "system_lang": LANG,
         "strings": AGENT_STRINGS,
         "languages": [{"code": code, "name": name} for code, name in LANGUAGES.items()],
-        "version": "0.4.0",
+        "version": "1.0.0",
         "configured": not first_run,
         "first_run": first_run,
         "config": CONFIG,
