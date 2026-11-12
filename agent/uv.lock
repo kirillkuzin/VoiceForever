@@ -458,7 +458,7 @@ wheels = [
 
 [[package]]
 name = "voiceforever-agent"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "pywebview", marker = "sys_platform == 'win32'" },

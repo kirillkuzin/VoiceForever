@@ -7,7 +7,7 @@
 ## Notes-esMX: Envía los mensajes del agente de voz VoiceForever al chat correcto (grupo, banda, hermandad, susurro)
 ## Notes-frFR: Envoie les messages de l'agent vocal VoiceForever dans le bon chat (groupe, raid, guilde, chuchotement)
 ## Author: VoiceForever
-## Version: 0.3.0
+## Version: 0.4.0
 ## SavedVariables: VoiceForeverDB
 
 Locales.lua

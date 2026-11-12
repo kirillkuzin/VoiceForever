@@ -11,11 +11,14 @@ Send the bot a voice message and it types it into the game chat through the Wind
 | `/confirm on\|off` | show the message with buttons before sending it |
 | `/style like an orc shaman` | rewrite messages in a style (or "translate to English"); `/style off` turns it off |
 | `/names Arthorn, Liana` | character names you mention often (helps recognition) |
+| `/channels` | the chat channels the Windows app sent from the game; say "channel Raiders, …" to write to one |
 | `/panel` | pin the control panel: app connected or not, channel, confirmation, style, language |
 | `/widgets on\|off` | cards and the panel, or plain text buttons |
 | `/language` (or `/lang`) | the bot's language: English, Russian, German, Spanish or French |
 
 Without a channel in the phrase, Claude continues the conversation in the channel you used in the last 5 minutes, otherwise it takes the default channel.
+
+With the addon, the Windows app also sends the nicknames of your group, guild, friends and recent whispers, and your chat channels: recognition spells those nicknames right, "whisper Arthorn" finds "Arthorn-Realm", and "reply to Arthorn, …" whispers him. `/status` shows how many the server has.
 
 ## Widgets
 
