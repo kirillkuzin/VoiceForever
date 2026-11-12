@@ -147,3 +147,85 @@ async def test_unreachable_server_retries_with_reason():
     assert status.detail and status.retry_at is not None
     await stop(task)
     assert agent.status.state is ConnState.DISCONNECTED
+
+
+# ---------------------------------------------------------------------- accounts
+
+LINK = "https://vf.example/account"
+
+
+class Accounts:
+    """The server's access service, in memory: one player on a plan with a daily limit."""
+
+    payments = False
+
+    def __init__(self, reason=""):
+        self.reason = reason  # the check refuses with this; "" allows
+
+    async def resolve_agent(self, token):
+        from vf_server.access import Player, Refusal
+
+        if token != TOKEN:
+            return Refusal("unknown", LINK)
+        return Player(1, {"plan": "Full access", "ai_left": 5, "ai_limit": 100, "until": 1_800_000_000, "link": LINK})
+
+    async def usage(self, report):
+        return None
+
+    async def close(self):
+        pass
+
+
+def account_hub(reason=""):
+    """A hub whose voice handler refuses as the server's VoiceService does (service.denied);
+    the service itself needs the server's Claude and Telegram packages."""
+    hub = AgentHub(Accounts(reason), ack_timeout_s=3)
+
+    async def refuse(user_id, upload):
+        result = {"status": "denied", "reason": reason, "detail": reason, "link": LINK}
+        return result | {"disconnect": True} if reason == "revoked" else result
+
+    hub.voice_handler = refuse
+    return hub
+
+
+async def test_account_and_denied_recording():
+    from vf_agent.client import Account, VoiceResult
+
+    hub = account_hub(reason="limit")
+    events = []
+    async with TestServer(hub.app()) as server:
+        agent = make_agent(server.make_url("/ws"), FakeBackend(), on_event=events.append)
+        task = asyncio.create_task(agent.run_forever())
+        await wait_online(hub)
+        result = await agent.send_voice(b"\0\0" * 16_000)
+        await stop(task)
+    [account] = [e for e in events if isinstance(e, Account)]
+    assert account == Account("Full access", 5, 100, 1_800_000_000, LINK)
+    assert isinstance(result, VoiceResult) and events[-2] == result
+    assert (result.status, result.reason, result.link) == ("denied", "limit", LINK)
+
+
+async def test_revoked_token_stops_the_agent_with_a_link():
+    from vf_agent.i18n import t
+
+    hub = account_hub(reason="revoked")
+    events = []
+    async with TestServer(hub.app()) as server:
+        agent = make_agent(server.make_url("/ws"), FakeBackend(), on_event=events.append)
+        task = asyncio.create_task(agent.run_forever())
+        await wait_online(hub)
+        await agent.send_voice(b"\0\0" * 16_000)
+        with pytest.raises(AuthError):
+            await asyncio.wait_for(task, timeout=5)
+    assert agent.status.state is ConnState.AUTH_FAILED
+    assert (agent.status.detail, agent.status.link) == (t("net.revoked"), LINK)
+
+
+async def test_unknown_token_gets_the_account_link():
+    hub = account_hub()
+    async with TestServer(hub.app()) as server:
+        agent = make_agent(server.make_url("/ws"), FakeBackend(), token="wrong-token-0123456789")
+        with pytest.raises(AuthError):
+            await asyncio.wait_for(agent.run_forever(), timeout=5)
+    assert agent.status.state is ConnState.AUTH_FAILED and agent.status.link == LINK

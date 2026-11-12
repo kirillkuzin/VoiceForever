@@ -61,6 +61,8 @@ You can also run the whole thing on your own server, with your own keys for Tele
 
 ## License
 
-[MIT](LICENSE)
+[GNU AGPL-3.0](LICENSE). Copyright (C) 2026 Kirill Kuzin.
+
+You can use, change and self-host VoiceForever for free. If you run a changed version for other people, you must publish your changes under the same license.
 
 [website]: https://voiceforever.crazybrain.space

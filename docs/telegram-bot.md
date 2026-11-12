@@ -16,6 +16,8 @@ Send the bot a voice message and it types it into the game chat through the Wind
 | `/widgets on\|off` | cards and the panel, or plain text buttons |
 | `/language` (or `/lang`) | the bot's language: English, Russian, German, Spanish or French |
 
+With an [access service](access-api.md) the bot also has `/buy` (a subscription for Telegram Stars, renewed every 30 days), `/terms` and `/paysupport`.
+
 Without a channel in the phrase, Claude continues the conversation in the channel you used in the last 5 minutes, otherwise it takes the default channel.
 
 With the addon, the Windows app also sends the nicknames of your group, guild, friends and recent whispers, and your chat channels: recognition spells those nicknames right, "whisper Arthorn" finds "Arthorn-Realm", and "reply to Arthorn, …" whispers him. `/status` shows how many the server has.

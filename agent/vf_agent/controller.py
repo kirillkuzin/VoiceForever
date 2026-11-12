@@ -19,6 +19,7 @@ from typing import Any
 
 from . import savedvars
 from .client import (
+    Account,
     Ack,
     Agent,
     AuthError,
@@ -92,6 +93,7 @@ class Controller:
         self.bind_check: BindCheck | None = None
         self.names = Names()
         self.context: GameContext | None = None  # names and channels from the game, for the server
+        self.account: Account | None = None  # from the server's account service, if it has one
         self.devices: Devices | None = None
         self._agent: Agent | None = None
         self._session: asyncio.Task[None] | None = None
@@ -175,6 +177,7 @@ class Controller:
                 "recording": self.recording,
                 "bind_check": self.bind_check,
                 "names": self.names,
+                "account": self.account,
             }
 
     def shutdown(self, timeout: float = 5.0) -> None:
@@ -201,6 +204,10 @@ class Controller:
             match event:
                 case Status():
                     self.status = event
+                    if event.state is ConnState.CONNECTED:  # the server sends its account, if any
+                        self.account = None
+                case Account():
+                    self.account = event
                 case Delivery() | VoiceResult():
                     self.history.appendleft(event)
                 case Game(state):

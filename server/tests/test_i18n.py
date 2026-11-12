@@ -10,7 +10,17 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 
 from vf_server import i18n
-from vf_server.bot import COMMANDS, describe, note_text, parse_channel, parse_language, set_commands, setup_bot
+from vf_server.access import Reason
+from vf_server.bot import (
+    COMMANDS,
+    PAYMENT_COMMANDS,
+    describe,
+    note_text,
+    parse_channel,
+    parse_language,
+    set_commands,
+    setup_bot,
+)
 from vf_server.chat import Channel, ChatMessage
 from vf_server.hub import Ack, AckStatus
 from vf_server.router import Decision, RouteResult
@@ -45,7 +55,9 @@ def python_keys():
     keys.discard("note.mp4")  # a file name in bot.py
     # Keys built from a value.
     keys |= {f"chan.{c}" for c in Channel}
-    keys |= {f"cmd.{c}" for c in COMMANDS}
+    keys |= {f"cmd.{c}" for c in COMMANDS + PAYMENT_COMMANDS}
+    keys |= {f"access.{r}" for r in Reason}
+    keys.add("setup.s1_ok_account")  # replaces setup.s1_ok with an access service
     keys |= {f"note.{n}" for n in ("llm_limit", "llm_error", "llm_down", "llm_format")}
     keys |= {"mode.addon", "mode.chat"}
     return keys
@@ -143,7 +155,7 @@ async def test_cards_and_failures_come_in_the_player_language():
     ui.lang(USER, "es")
     hub.status = AckStatus.NOT_FOCUSED
     bot = FakeBot()
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.GUILD, "", "hola"), "hola", False)
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.GUILD, "", "hola"), "hola", False)
     assert "Responder" in bot.of(SendWidget)[0].html
     assert json.loads(bot.of(EditMessageWidgetData)[-1].chat_data)["e"] == i18n.t("es", "ack.not_focused")
 
@@ -214,7 +226,7 @@ class RecordingSession(BaseSession):
 def bot_env():
     service = VoiceService(Store(":memory:"), FakeHub(), transcriber=None, router=None)
     dp = Dispatcher()
-    setup_bot(dp, service, {USER})
+    setup_bot(dp, service)
     session = RecordingSession()
     bot = Bot("123456:" + "A" * 35, session=session)
     updates = iter(range(1, 1000))

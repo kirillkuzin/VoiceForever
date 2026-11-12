@@ -6,11 +6,25 @@ window) do not freeze the window.
 
 import dataclasses
 import logging
+import webbrowser
 from pathlib import Path
 from typing import Any, Protocol
 
 from .. import __version__, i18n
-from ..client import BindCheck, Delivery, Event, Game, MicLevel, Names, PadState, Recording, Status, VoiceResult
+from ..client import (
+    Account,
+    BindCheck,
+    Delivery,
+    Event,
+    Game,
+    MicLevel,
+    Names,
+    PadState,
+    Recording,
+    Status,
+    VoiceResult,
+    web_link,
+)
 from ..config import AgentConfig, ConfigError, defaults
 from ..controller import Controller
 from ..ptt import PAD_BUTTONS, button_label
@@ -28,7 +42,12 @@ def status_json(status: Status) -> dict[str, Any]:
         "attempt": status.attempt,
         "retry_at": status.retry_at,
         "since": status.since,
+        "link": status.link,
     }
+
+
+def account_json(account: Account | None) -> dict[str, Any] | None:
+    return dataclasses.asdict(account) if account is not None else None
 
 
 def delivery_json(delivery: Delivery | VoiceResult) -> dict[str, Any]:
@@ -76,6 +95,8 @@ def event_json(seq: int, event: Event) -> dict[str, Any]:
             return {"type": "bind_check", "seq": seq, "check": dataclasses.asdict(event)}
         case Names():
             return {"type": "names", "seq": seq, "names": dataclasses.asdict(event)}
+        case Account():
+            return {"type": "account", "seq": seq, "account": account_json(event)}
 
 
 class Host(Protocol):
@@ -125,6 +146,7 @@ class Api:
             "bind_check": dataclasses.asdict(c) if (c := snapshot["bind_check"]) else None,
             "names": dataclasses.asdict(snapshot["names"]),
             "pad_buttons": pad_buttons_json(),
+            "account": account_json(snapshot.get("account")),
         }
 
     def save_config(self, values: dict[str, Any]) -> dict[str, Any]:
@@ -219,6 +241,12 @@ class Api:
     def detect_game_window(self) -> dict[str, str]:
         """Wait a few seconds, then report the window in front: the player switches to the game."""
         return self._host.detect_window()
+
+    def open_link(self, url: str) -> bool:
+        """Open the account page the server named, in the default browser. https only."""
+        if not (url := web_link(url)):
+            return False
+        return webbrowser.open(url)
 
     def open_config_folder(self) -> None:
         self._host.open_path(self._host.config_path.parent)

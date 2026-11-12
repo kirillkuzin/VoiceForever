@@ -116,6 +116,8 @@
   // What became of a recording, when nothing reached the chat (VoiceResult.status): our own
   // words for the statuses we know, so they follow the window's language.
   const VOICE_FAILED = ['stt_error', 'bad_audio', 'too_long', 'unsupported', 'offline', 'timeout', 'error'];
+  // Why the server's account service refused a recording (VoiceResult.reason).
+  const ACCESS_REASONS = ['unknown', 'revoked', 'no_access', 'limit', 'rate', 'unavailable'];
 
   const LEVEL_BARS = 24;
   const HOT_BAR = 20; // from here the meter turns red: too loud
@@ -158,6 +160,7 @@
     padNote: '', // what came of the last assignment
     bind: { check: null, last: -1 }, // the in-game check: its last step, and the last one before an error
     wizardVoice: null, // the recording made on the last wizard step
+    account: null, // plan and messages left, from servers with accounts
   };
 
   const TIP = { owner: null }; // the (i) whose explanation is showing
@@ -196,6 +199,7 @@
     S.recording = state.recording;
     S.padButtons = state.pad_buttons;
     S.bind.check = state.bind_check;
+    S.account = state.account;
     S.version = state.version;
     S.languages = state.languages;
     applyLanguage(state);
@@ -268,6 +272,10 @@
       case 'names':
         S.names = event.names;
         renderNames();
+        break;
+      case 'account':
+        S.account = event.account;
+        renderAccount();
         break;
     }
   }
@@ -368,7 +376,8 @@
     title.style.color = look.c1;
     $('#st-url').textContent = S.saved && S.saved.server_url ? S.saved.server_url : t('status.no_url');
     renderStatusLine();
-    const key = `${s.state}|${S.configured}`;
+    renderAccount();
+    const key = `${s.state}|${S.configured}|${s.link || ''}`;
     if (S.actionsFor !== key) {
       S.actionsFor = key;
       $('#st-actions').replaceChildren(...statusActions(s.state));
@@ -388,7 +397,8 @@
         const wait = Math.max(0, Math.ceil((s.retry_at || now) - now));
         return t('status.retry', { detail, s: wait, n: s.attempt });
       }
-      case 'connecting': case 'auth_failed': case 'replaced': return ''; // the title says it all
+      case 'auth_failed': return s.link ? detail : ''; // an account service says why: revoked, unknown
+      case 'connecting': case 'replaced': return ''; // the title says it all
       default:
         if (!S.configured) return t('status.not_configured');
         return detail;
@@ -410,13 +420,29 @@
         return [button(t('common.cancel'), true, () => call('disconnect'))];
       case 'reconnecting':
         return [button(t('action.retry'), false, () => call('reconnect')), button(t('action.disconnect'), true, () => call('disconnect'))];
-      case 'auth_failed':
-        return [button(t('action.open_settings'), false, () => { showView('settings'); $('#s-token').focus(); }), button(t('action.retry'), true, connect)];
+      case 'auth_failed': {
+        const settings = button(t('action.open_settings'), false, () => { showView('settings'); $('#s-token').focus(); });
+        const account = S.status.link ? [button(t('account.open'), true, () => call('open_link', S.status.link))] : [];
+        return [settings, ...account, button(t('action.retry'), true, connect)];
+      }
       case 'replaced':
         return [button(t('action.connect_here'), false, connect)];
       default:
         return [button(t('action.connect'), false, connect, !S.configured)];
     }
+  }
+
+  // Plan, AI messages left today and the paid-until date, from servers with accounts.
+  function renderAccount() {
+    const a = S.status.state === 'connected' ? S.account : null; // stale once the connection is gone
+    $('#st-account').hidden = !a;
+    if (!a) return;
+    $('#st-plan').textContent = a.plan || t('account.plan');
+    const parts = [];
+    if (a.ai_left !== null) parts.push(a.ai_limit !== null ? t('account.ai_of', { left: a.ai_left, limit: a.ai_limit }) : t('account.ai_left', { left: a.ai_left }));
+    if (a.until) parts.push(t('account.until', { date: new Date(a.until * 1000).toLocaleDateString(S.lang) }));
+    $('#st-quota').textContent = parts.join(' · ');
+    $('#st-account-open').hidden = !a.link;
   }
 
   function renderGame() {
@@ -478,7 +504,11 @@
     const note = (kind, text) => h('span', { class: `mdetail ${kind}` }, text);
     switch (d.status) {
       case 'ok':
-        return { line: tagged(), note: null, mark: 'ok', label: t('msgs.sent') };
+        return { line: tagged(), note: d.note === 'ai_limit' ? note('muted', t('note.ai_limit')) : null, mark: 'ok', label: t('msgs.sent') };
+      case 'denied': {
+        const why = ACCESS_REASONS.includes(d.reason) ? t(`access.${d.reason}`) : t('access.no_access');
+        return { line: plain(t('msgs.voice_refused')), mark: 'bad', label: t('msgs.denied_label'), note: note('bad', why) };
+      }
       case 'not_focused':
         return {
           line: tagged(), mark: 'wait', label: t('msgs.not_focused'),
@@ -1161,6 +1191,7 @@
     bindTips();
     $('#btn-minimize').addEventListener('click', () => call('minimize'));
     $('#btn-close').addEventListener('click', () => call('close'));
+    $('#st-account-open').addEventListener('click', () => S.account && call('open_link', S.account.link));
     $('#lang-pick').addEventListener('change', (e) => switchLanguage(e.target.value));
     $('#s-lang').addEventListener('change', (e) => switchLanguage(e.target.value));
     for (const tab of $$('.tab')) {

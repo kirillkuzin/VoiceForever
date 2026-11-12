@@ -16,7 +16,7 @@ The window needs the Microsoft Edge WebView2 Runtime. Windows 11 already has it,
 
 On first launch a four-step setup opens:
 
-1. **Server**: the server address `wss://<domain>/ws` and the agent token (the part after the colon for your Telegram ID in `VF_USERS`). The agent checks the connection right away.
+1. **Server**: the server address and the agent token. The hosted server `wss://voiceforever.crazybrain.space/ws` is filled in, its token comes from your account page there. For your own server use `wss://<domain>/ws` and the part after the colon for your Telegram ID in `VF_USERS`. The agent checks the connection right away.
 2. **Mode**: with the VoiceForever addon (recommended) or plain chat.
 3. **Voice**: the microphone, with a level meter, and the gamepad button that starts recording.
 4. **Check**: the in-game check of the button (see below) and a test phrase.
@@ -25,7 +25,7 @@ On first launch a four-step setup opens:
 
 After that the window has two tabs:
 
-- **Status**: whether the agent is connected, with disconnect, reconnect and connect buttons; whether the game window is active; the gamepad and recording state; the last messages, each marked with whether it reached the game. "Test in /say" types a test line.
+- **Status**: whether the agent is connected, with disconnect, reconnect and connect buttons; on a server with accounts, your plan, the AI messages left today and a button to the account page; whether the game window is active; the gamepad and recording state; the last messages, each marked with whether it reached the game. "Test in /say" types a test line.
 - **Settings**: everything in `config.toml` (server, token, input mode, addon key, voice, game window, typing delays, language). The ⓘ icon next to a setting explains it. **Detect automatically** finds the WoW window and process for you. If you change the address, the token or the mode, the agent reconnects by itself.
 
 ![The settings tab](images/agent-settings.png)

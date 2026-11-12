@@ -8,15 +8,19 @@ Push-to-talk from the agent (one binary frame: a JSON header line, "\n", then th
   agent -> server  {"type": "voice", "id": "...", "format": "wav", "duration_ms": 2300}\n<RIFF...>
   server -> agent  {"type": "voice_result", "id": "...", "status": "ok" | "skip" | "empty" | ..., ...}
 The server types the recognised message through the usual "send" before the voice_result.
+A refused recording gets {"status": "denied", "reason": "limit" | "no_access" | ..., "link": "..."}.
+With an access service the server also sends the account summary it gives (plan, messages
+left today), right after connecting and whenever it changes:
+  server -> agent  {"type": "account", ...}
 Names and channels from the game (see gamectx.py), sent again when they change:
   agent -> server  {"type": "context", "v": 1, "source": "live" | "file", "age_s": 3, "channels": [...], ...}
   agent -> server  {"type": "context_clear"}  (the player turned it off)
-The agent authenticates with "Authorization: Bearer <agent token>".
+The agent authenticates with "Authorization: Bearer <agent token>". A refused token gets
+HTTP 401 with {"error": "unknown" | "revoked", "link": "..."}; 503 if the access point is down.
 """
 
 import asyncio
 import contextlib
-import hmac
 import json
 import logging
 import uuid
@@ -27,6 +31,7 @@ from typing import Any
 
 from aiohttp import WSMsgType, web
 
+from .access import Access, LocalAccess, Player, Reason
 from .chat import ChatMessage
 
 log = logging.getLogger(__name__)
@@ -93,11 +98,12 @@ def parse_voice_frame(frame: bytes) -> VoiceUpload:
 class AgentHub:
     def __init__(
         self,
-        users: Mapping[int, str],
+        access: Access | Mapping[int, str],
         ack_timeout_s: float = 30.0,
         max_voice_bytes: int = 4 * 1024 * 1024,
     ) -> None:
-        self._tokens = tuple(users.items())  # (user_id, token)
+        # A plain {user id: token} mapping is the VF_USERS list.
+        self.access: Access = LocalAccess(access) if isinstance(access, Mapping) else access
         self._conns: dict[int, web.WebSocketResponse] = {}
         self._info: dict[int, AgentInfo] = {}
         self._pending: dict[str, asyncio.Future[Ack]] = {}
@@ -118,20 +124,19 @@ class AgentHub:
     async def _health(self, request: web.Request) -> web.Response:
         return web.json_response({"ok": True, "agents_online": len(self._conns)})
 
-    def _user_for_token(self, token: str) -> int | None:
-        # Compare against every token so timing does not reveal which one matched.
-        found = None
-        for user_id, expected in self._tokens:
-            if hmac.compare_digest(token.encode(), expected.encode()):
-                found = user_id
-        return found
-
     async def _handle_ws(self, request: web.Request) -> web.StreamResponse:
         scheme, _, token = request.headers.get("Authorization", "").partition(" ")
-        user_id = self._user_for_token(token.strip()) if scheme.lower() == "bearer" else None
-        if user_id is None:
-            log.warning("agent auth failed from %s", request.remote)
-            raise web.HTTPUnauthorized(text="bad agent token")
+        if scheme.lower() != "bearer" or not token.strip():
+            raise web.HTTPUnauthorized(text=json.dumps({"error": Reason.UNKNOWN}),
+                                       content_type="application/json")
+        found = await self.access.resolve_agent(token.strip())
+        if not isinstance(found, Player):
+            log.warning("agent auth failed from %s: %s", request.remote, found.reason)
+            body = json.dumps({"error": found.reason, "link": found.link})
+            if found.reason == Reason.UNAVAILABLE:
+                raise web.HTTPServiceUnavailable(text=body, content_type="application/json")
+            raise web.HTTPUnauthorized(text=body, content_type="application/json")
+        user_id = found.user_id
 
         ws = web.WebSocketResponse(
             heartbeat=20, max_msg_size=self.max_voice_bytes + MAX_HEADER_BYTES + 1
@@ -142,6 +147,8 @@ class AgentHub:
         self._conns[user_id] = ws
         self._info[user_id] = AgentInfo()
         log.info("agent connected for user %s", user_id)
+        if found.account is not None:
+            await self.send_account(user_id, found.account)
 
         # Voice is handled in tasks: the loop below must keep reading, because the
         # message typed for a recording is confirmed by an ack on this same connection.
@@ -205,9 +212,12 @@ class AgentHub:
                 except Exception:
                     log.exception("voice from user %s failed", user_id)
                     result = {"status": "error", "detail": "server error"}
+        disconnect = bool(result.pop("disconnect", False))
         with contextlib.suppress(ConnectionResetError):
             if not ws.closed:
                 await ws.send_json({"type": "voice_result", "id": upload.id, **result})
+            if disconnect:  # the token was revoked
+                await ws.close(code=4001, message=b"token revoked")
 
     # ------------------------------------------------------------------ api
     def is_online(self, user_id: int) -> bool:
@@ -216,6 +226,17 @@ class AgentHub:
 
     def info(self, user_id: int) -> AgentInfo | None:
         return self._info.get(user_id) if self.is_online(user_id) else None
+
+    def online_users(self) -> list[int]:
+        return [uid for uid, ws in self._conns.items() if not ws.closed]
+
+    async def send_account(self, user_id: int, account: Mapping[str, Any]) -> None:
+        """Pass the access service's account summary to the player's agent, if it is online."""
+        ws = self._conns.get(user_id)
+        if ws is None or ws.closed:
+            return
+        with contextlib.suppress(ConnectionResetError):
+            await ws.send_json({**account, "type": "account"})
 
     async def send(
         self, user_id: int, msg: ChatMessage, parts: list[str], voice_id: str = ""

@@ -3,6 +3,7 @@
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from vf_server.access import LocalAccess
 from vf_server.config import Settings
 from vf_server.i18n import t
 from vf_server.service import VoiceService
@@ -62,7 +63,7 @@ async def test_hints_come_in_the_player_language():
     store = Store(":memory:")
     store.update(USER, known_names="Arthorn, Liana")
     stt = RecordingTranscriber()
-    service = VoiceService(store, hub=None, transcriber=stt, router=None)
+    service = VoiceService(store, hub=None, transcriber=stt, router=None, access=LocalAccess({}))
 
     await service.transcribe(USER, b"ogg", "voice.ogg")
     store.update_ui(USER, tg_lang="de-DE")

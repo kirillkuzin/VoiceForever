@@ -21,6 +21,7 @@ gamepad button + PC microphone ──────┴→ server: speech recogniti
 3. [Windows app](agent.md): install and set up, voice from the gamepad, tray, settings file, running from source.
 4. [Telegram bot](telegram-bot.md): commands and widgets.
 5. [Development](development.md): layout, tests, builds, screenshots.
+6. [Access API](access-api.md): accounts, plans and limits from a service of your own instead of `VF_USERS`.
 
 ## Downloads
 
