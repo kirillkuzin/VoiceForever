@@ -263,3 +263,24 @@ def test_event_json_shapes():
     delivery = event_json(2, Delivery("whisper", "Арторн", "hi", "ok"))
     assert delivery["type"] == "delivery" and delivery["delivery"]["target"] == "Арторн"
     assert event_json(3, Game(GameState.ACTIVE)) == {"type": "game", "seq": 3, "game": "active"}
+
+
+def test_account_reaches_the_page_and_only_https_links_open(tmp_path, monkeypatch):
+    from vf_agent.client import Account, VoiceResult
+    from vf_agent.gui.api import event_json
+
+    data = {"plan": "Full access", "ai_left": 7, "ai_limit": 100, "until": 1_800_000_000,
+            "link": "https://vf.example/account", "extra": "ignored"}
+    account = Account.from_json(data)
+    assert event_json(5, account) == {"type": "account", "seq": 5, "account": {
+        "plan": "Full access", "ai_left": 7, "ai_limit": 100, "until": 1_800_000_000, "link": "https://vf.example/account"}}
+    assert Account.from_json({"ai_left": True, "link": "javascript:alert(1)"}) == Account()
+    denied = VoiceResult.from_json("v1", {"status": "denied", "reason": "limit", "link": "http://plain.example"})
+    assert (denied.reason, denied.link, denied.ai) == ("limit", "", False)
+
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened.append(url) or True)
+    api = Api(FakeHost(tmp_path))
+    assert api.open_link("https://vf.example/account") and not api.open_link("file:///C:/Windows")
+    assert opened == ["https://vf.example/account"]
+    assert api.get_state()["account"] is None

@@ -5,6 +5,7 @@ import tomllib
 import pytest
 
 from vf_agent.config import (
+    OFFICIAL_URL,
     PLACEHOLDER_TOKEN,
     PLACEHOLDER_URL,
     TEMPLATE,
@@ -96,7 +97,7 @@ def test_save_and_load_round_trip(tmp_path):
 
 def test_render_writes_valid_toml_for_template():
     data = tomllib.loads(TEMPLATE)
-    assert data["server_url"] == PLACEHOLDER_URL and data["token"] == PLACEHOLDER_TOKEN
+    assert data["server_url"] == OFFICIAL_URL and data["token"] == PLACEHOLDER_TOKEN
     assert tomllib.loads(render(defaults())) == defaults()
 
 
@@ -117,7 +118,7 @@ def test_load_accepts_bom(tmp_path):
 
 def test_draft_for_missing_file(tmp_path):
     config, draft, errors = load_draft(tmp_path / "config.toml")
-    assert config is None and draft == defaults() and errors == {}
+    assert config is None and draft == defaults() | {"server_url": OFFICIAL_URL} and errors == {}
 
 
 def test_draft_for_template_hides_placeholders(tmp_path):
@@ -125,8 +126,15 @@ def test_draft_for_template_hides_placeholders(tmp_path):
     path.write_text(TEMPLATE.replace('mode = "addon"', 'mode = "chat"'), encoding="utf-8")
     config, draft, errors = load_draft(path)
     assert config is None
-    assert draft["server_url"] == "" and draft["token"] == "" and draft["mode"] == "chat"
-    assert errors.keys() == {"server_url", "token"}
+    assert draft["server_url"] == OFFICIAL_URL and draft["token"] == "" and draft["mode"] == "chat"
+    assert errors.keys() == {"token"}
+
+
+def test_draft_for_old_template_offers_the_hosted_server(tmp_path):
+    path = tmp_path / "config.toml"
+    path.write_text(TEMPLATE.replace(OFFICIAL_URL, PLACEHOLDER_URL), encoding="utf-8")
+    _, draft, errors = load_draft(path)
+    assert draft["server_url"] == OFFICIAL_URL and errors.keys() == {"server_url", "token"}
 
 
 def test_draft_for_valid_file(tmp_path):
@@ -140,4 +148,4 @@ def test_draft_for_broken_file(tmp_path):
     path = tmp_path / "config.toml"
     path.write_text("[[[", encoding="utf-8")
     config, draft, errors = load_draft(path)
-    assert config is None and draft == defaults() and "file" in errors
+    assert config is None and draft == defaults() | {"server_url": OFFICIAL_URL} and "file" in errors

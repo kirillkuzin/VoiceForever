@@ -20,6 +20,9 @@ from .ptt import BY_NAME as PAD_BUTTONS
 from .ptt import PttMode
 
 PLACEHOLDER_URL = "wss://your-domain.example/ws"
+# Filled in for a new install: the hosted server with accounts. Your own server's address
+# goes here instead if you host it yourself.
+OFFICIAL_URL = "wss://voiceforever.crazybrain.space/ws"
 PLACEHOLDER_TOKEN = "paste-agent-token-here"
 MIN_TOKEN_LENGTH = 16
 
@@ -235,12 +238,12 @@ def defaults() -> dict[str, Any]:
     return AgentConfig(server_url="", token="").to_dict()
 
 
-TEMPLATE = render(defaults() | {"server_url": PLACEHOLDER_URL, "token": PLACEHOLDER_TOKEN})
+TEMPLATE = render(defaults() | {"server_url": OFFICIAL_URL, "token": PLACEHOLDER_TOKEN})
 
 
 def load_draft(path: Path) -> tuple[AgentConfig | None, dict[str, Any], dict[str, str]]:
     """For the window: the config if the file is valid, the values to show, and the problems."""
-    draft = defaults()
+    draft = defaults() | {"server_url": OFFICIAL_URL}
     if not path.exists():
         return None, draft, {}
     try:
@@ -251,9 +254,10 @@ def load_draft(path: Path) -> tuple[AgentConfig | None, dict[str, Any], dict[str
         config = AgentConfig.from_dict(raw)
     except ConfigError as e:
         draft |= {k: list(v) if isinstance(v, tuple) else v for k, v in raw.items() if k in draft}
-        for key, placeholder in (("server_url", PLACEHOLDER_URL), ("token", PLACEHOLDER_TOKEN)):
-            if draft[key] == placeholder:
-                draft[key] = ""
+        if draft["server_url"] == PLACEHOLDER_URL:  # a config.toml from an older version
+            draft["server_url"] = OFFICIAL_URL
+        if draft["token"] == PLACEHOLDER_TOKEN:
+            draft["token"] = ""
         return None, draft, e.errors
     return config, config.to_dict(), {}
 

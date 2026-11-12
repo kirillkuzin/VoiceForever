@@ -41,6 +41,7 @@ def page_keys():
     keys |= {f"game.{g}" for g in ("active", "background", "closed")}
     keys |= {"unit.s", "unit.ms"}
     keys |= {f"voice.{v}" for v in ("stt_error", "bad_audio", "too_long", "unsupported", "offline", "timeout", "error")}
+    keys |= {f"access.{r}" for r in ("unknown", "revoked", "no_access", "limit", "rate", "unavailable")}
     keys |= {f"wizard.check_{c}" for c in ("checking", "ok", "auth", "failed", "replaced")}
     keys |= {f"bind.row_{r}" for r in ("game", "focus", "sent", "reload", "done")}
     keys |= {f"bind.row_{r}_now" for r in ("game", "focus", "sent", "reload")}
