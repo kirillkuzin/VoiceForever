@@ -26,7 +26,7 @@ gamepad button + PC microphone ──────┴→ server: speech recogniti
 ## Downloads
 
 - Server: Docker image `ghcr.io/kirillkuzin/voiceforever-server`.
-- Windows app and addon: `VoiceForeverAgent.exe` and `VoiceForever-addon-<version>.zip` on [Releases](https://github.com/kirillkuzin/VoiceForever/releases).
+- Windows app and addon: `VoiceForeverAgent.exe` and `VoiceForever-addon.zip` on [Releases](https://github.com/kirillkuzin/VoiceForever/releases/latest). Direct links to the newest ones: [VoiceForeverAgent.exe](https://github.com/kirillkuzin/VoiceForever/releases/latest/download/VoiceForeverAgent.exe), [VoiceForever-addon.zip](https://github.com/kirillkuzin/VoiceForever/releases/latest/download/VoiceForever-addon.zip).
 
 ## Quick start
 
