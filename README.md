@@ -63,5 +63,4 @@ You can also run the whole thing on your own server, with your own keys for Tele
 
 [MIT](LICENSE)
 
-<!-- TODO: replace with the real website address once the domain is registered. -->
-[website]: https://voiceforever.example
+[website]: https://voiceforever.crazybrain.space
