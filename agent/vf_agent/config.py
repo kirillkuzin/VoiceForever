@@ -32,7 +32,9 @@ LIMITS: frozendict[str, tuple[float, float]] = frozendict({
     "max_record_s": (3, 120),
 })
 INT_FIELDS = frozenset({"open_delay_ms", "part_delay_ms", "key_delay_ms"})
-BOOL_FIELDS = frozenset({"connect_on_start", "close_to_tray", "autostart", "ptt_enabled", "ptt_sounds"})
+BOOL_FIELDS = frozenset({
+    "connect_on_start", "close_to_tray", "autostart", "ptt_enabled", "ptt_sounds", "game_context", "live_context",
+})
 LIST_FIELDS = frozenset({"window_titles", "process_names"})
 
 
@@ -67,6 +69,8 @@ class AgentConfig:
     mic_device: str = ""  # "" = the Windows default microphone
     max_record_s: float = 30
     ptt_sounds: bool = True
+    game_context: bool = True
+    live_context: bool = True
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
@@ -199,8 +203,13 @@ COMMENTS: frozendict[str, str] = frozendict({
     ),
     "mic_device": 'Microphone name as Windows shows it; "" = the default microphone',
     "max_record_s": "A recording is sent after this many seconds even if the button is not pressed again",
+    "game_context": (
+        "Names from the game (addon mode): your chat channels and the nicknames of your group, guild,\n"
+        "friends and recent whispers go to the server, which keeps them in memory only\n"
+        "live_context: copy fresh ones from the addon (Ctrl+C) when a recording starts"
+    ),
 })
-BLANK_BEFORE = frozenset({"mode", "window_titles", "focus_wait_s", "connect_on_start", "ptt_enabled"})
+BLANK_BEFORE = frozenset({"mode", "window_titles", "focus_wait_s", "connect_on_start", "ptt_enabled", "game_context"})
 
 
 def toml_value(value: Any) -> str:

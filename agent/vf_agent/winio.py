@@ -169,6 +169,20 @@ def set_clipboard_text(text: str) -> None:
         user32.CloseClipboard()
 
 
+def wait_for_clipboard(expected: str, timeout_s: float = 0.5) -> str | None:
+    """The clipboard text once it starts with `expected` (the game copies it in its own time),
+    or whatever is there when the time is up."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        time.sleep(0.03)
+        try:
+            text = get_clipboard_text()
+        except OSError:
+            text = None
+        if (text is not None and text.startswith(expected)) or time.monotonic() > deadline:
+            return text
+
+
 # ------------------------------------------------------------------ window
 def _title(hwnd: int) -> str:
     length = user32.GetWindowTextLengthW(hwnd)
@@ -251,9 +265,11 @@ class WindowsBackend:
                 return Path(path)
         return None
 
-    def run(self, actions: list[Action]) -> None:
+    def run(self, actions: list[Action]) -> str | None:
+        """Carry out the actions; returns what the last COPY found on the clipboard."""
         saved = get_clipboard_text()
-        pasted = False
+        pasted = copying = False
+        copied: str | None = None
         try:
             for action in actions:
                 match action:
@@ -268,12 +284,18 @@ class WindowsBackend:
                         time.sleep(0.02)
                         press("ctrl+v")
                         time.sleep(0.05)  # let the game read the clipboard before the next key
+                    case Action(Kind.COPY, str(expected)):
+                        pasted = copying = True  # the clipboard changes: put the player's text back
+                        press("ctrl+c")
+                        copied = wait_for_clipboard(expected)
                     case _:
                         raise ValueError(f"unknown action {action!r}")
+            return copied
         finally:
-            if pasted and saved is not None:
+            # What was copied from the game holds names: never leave it on the clipboard.
+            if pasted and (saved is not None or copying):
                 time.sleep(0.15)
                 try:
-                    set_clipboard_text(saved)
+                    set_clipboard_text(saved or "")
                 except OSError:
                     pass

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .. import __version__, i18n
-from ..client import BindCheck, Delivery, Event, Game, MicLevel, PadState, Recording, Status, VoiceResult
+from ..client import BindCheck, Delivery, Event, Game, MicLevel, Names, PadState, Recording, Status, VoiceResult
 from ..config import AgentConfig, ConfigError, defaults
 from ..controller import Controller
 from ..ptt import PAD_BUTTONS, button_label
@@ -74,6 +74,8 @@ def event_json(seq: int, event: Event) -> dict[str, Any]:
             return {"type": "mic", "seq": seq, "level": level}
         case BindCheck():
             return {"type": "bind_check", "seq": seq, "check": dataclasses.asdict(event)}
+        case Names():
+            return {"type": "names", "seq": seq, "names": dataclasses.asdict(event)}
 
 
 class Host(Protocol):
@@ -121,6 +123,7 @@ class Api:
             "pad": dataclasses.asdict(snapshot["pad"]),
             "recording": recording_json(snapshot["recording"]),
             "bind_check": dataclasses.asdict(c) if (c := snapshot["bind_check"]) else None,
+            "names": dataclasses.asdict(snapshot["names"]),
             "pad_buttons": pad_buttons_json(),
         }
 

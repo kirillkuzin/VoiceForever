@@ -14,7 +14,7 @@ from vf_server.hub import AgentHub  # noqa: E402
 
 from vf_agent import controller as controller_module  # noqa: E402
 from vf_agent import i18n  # noqa: E402
-from vf_agent.client import ConnState, Delivery, Game, PadState, RecState, Recording, Status  # noqa: E402
+from vf_agent.client import ConnState, Delivery, Game, Names, PadState, RecState, Recording, Status  # noqa: E402
 from vf_agent.config import AgentConfig, defaults  # noqa: E402
 from vf_agent.controller import Controller  # noqa: E402
 from vf_agent.gui.api import Api, event_json  # noqa: E402
@@ -175,6 +175,7 @@ class StubController:
             "pad": PadState(False),
             "recording": Recording(RecState.IDLE),
             "bind_check": None,
+            "names": Names(),
         }
 
     def connect(self):

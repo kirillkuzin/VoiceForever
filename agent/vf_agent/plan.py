@@ -14,6 +14,7 @@ class Kind(StrEnum):
     KEY = "key"
     PASTE = "paste"
     SLEEP = "sleep"
+    COPY = "copy"  # Ctrl+C, then read the clipboard; the value is the text it should start with
 
 
 class GameState(StrEnum):
@@ -65,9 +66,11 @@ SLASH: frozendict[str, str] = frozendict({
 })
 
 ADDON_PREFIX = "VF"
-# Lines for the addon itself, not chat: push-to-talk setup and the in-game status badge.
-# Only the agent writes them; the server may not.
-CONTROL_CHANNELS = frozenset({"ptt", "status"})
+# Lines for the addon itself, not chat: push-to-talk setup, the in-game status badge and the
+# export of names and channels. Only the agent writes them; the server may not.
+CONTROL_CHANNELS = frozenset({"ptt", "status", "export"})
+# What the addon puts in its edit box for the agent to copy: "VFX1 <nonce> <json>".
+EXPORT_PREFIX = "VFX1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +118,8 @@ def chat_line(channel: str, target: str, text: str) -> str:
     match channel:
         case "channel" if target.isdigit():
             return f"/{target} {text}"
+        case "channel":  # the chat box takes channel numbers only; only the addon finds names
+            raise ValueError(f"channel {target!r} by name needs addon mode")
         case "whisper" if target:
             return f"/w {target} {text}"
         case _:
@@ -148,3 +153,21 @@ def build_actions(
             Action(Kind.KEY, "enter"),
         ]
     return actions
+
+
+def export_actions(hotkey: str, nonce: str, open_delay_ms: int = 40) -> list[Action]:
+    """Ask the addon for its names and channels and copy them from its edit box.
+
+    The addon answers "VF:export:<nonce>:" by putting the snapshot in the box, selected; the
+    agent copies it. Enter, which empties the box again, is pressed only after the copy is
+    checked (Agent.export_context): with an old addon nothing is in focus, and an Enter would
+    open the game's chat box.
+    """
+    return [
+        Action(Kind.KEY, hotkey),
+        Action(Kind.SLEEP, open_delay_ms),
+        Action(Kind.PASTE, addon_line("export", nonce, "")),
+        Action(Kind.KEY, "enter"),
+        Action(Kind.SLEEP, open_delay_ms),
+        Action(Kind.COPY, f"{EXPORT_PREFIX} {nonce} "),
+    ]

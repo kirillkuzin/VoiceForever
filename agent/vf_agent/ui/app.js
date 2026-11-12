@@ -141,6 +141,7 @@
     configPath: '',
     status: { state: 'disconnected', detail: '', attempt: 0, retry_at: null, since: null },
     game: 'closed',
+    names: { source: '', at: null, me: '', counts: {} }, // names and channels from the game
     history: [],
     view: 'status',
     wizard: { step: 1, check: 'idle', detail: '' },
@@ -189,6 +190,7 @@
     S.configPath = state.config_path;
     S.status = state.status;
     S.game = state.game;
+    S.names = state.names;
     S.history = state.history;
     S.pad = state.pad;
     S.recording = state.recording;
@@ -262,6 +264,10 @@
         break;
       case 'bind_check':
         onBindCheck(event.check);
+        break;
+      case 'names':
+        S.names = event.names;
+        renderNames();
         break;
     }
   }
@@ -419,6 +425,24 @@
     pill.textContent = t(`game.${game}`);
     pill.style.color = GAME_COLORS[game];
     pill.style.borderColor = GAME_COLORS[game];
+    renderNames();
+  }
+
+  // What the server knows from the game: how many channels and names, and from when.
+  function renderNames() {
+    const n = S.names;
+    $('#st-names').hidden = !n.source;
+    if (!n.source) return;
+    const at = new Date(n.at * 1000);
+    const today = at.toDateString() === new Date().toDateString();
+    const time = today
+      ? at.toLocaleTimeString(S.lang, { hour: '2-digit', minute: '2-digit' })
+      : at.toLocaleString(S.lang, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const c = n.counts;
+    $('#st-names-line').textContent = [
+      t('names.counts', { channels: c.channels, guild: c.guild, online: c.guild_online, friends: c.friends, group: c.group }),
+      t(n.source === 'live' ? 'names.live' : 'names.file', { time }),
+    ].join(' · ');
   }
 
   function renderMessages() {

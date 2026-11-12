@@ -462,6 +462,8 @@ def test_export_ignores_a_bad_nonce_and_times_out(lua):
     # A key the player pressed meanwhile spoils the copy; the agent then sends no Enter,
     # so the box gives the keyboard back by itself, sooner than after a normal line.
     lua.execute("state.now = 1.5; frames.VoiceForeverEditBox.scripts.OnUpdate(frames.VoiceForeverEditBox)")
+    assert lua.eval("frames.VoiceForeverEditBox.exporting")  # the agent may still be copying
+    lua.execute("state.now = 2.5; frames.VoiceForeverEditBox.scripts.OnUpdate(frames.VoiceForeverEditBox)")
     box = lua.eval("frames.VoiceForeverEditBox")
     assert box.text == "" and not box.focus and not box.exporting
 

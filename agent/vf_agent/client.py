@@ -5,8 +5,10 @@ for every message the server asked to type, and the GameState of the game window
 """
 
 import asyncio
+import contextlib
 import json
 import logging
+import secrets
 import socket
 import ssl
 import time
@@ -27,8 +29,9 @@ from websockets.exceptions import (
 
 from . import __version__, audio
 from .config import AgentConfig
+from .context import GameContext, parse_export
 from .i18n import t
-from .plan import Action, GameState, Mode, SendCommand, build_actions
+from .plan import Action, GameState, Kind, Mode, SendCommand, build_actions, export_actions
 
 log = logging.getLogger("vf_agent")
 
@@ -44,7 +47,7 @@ REPLACED_REASON = "replaced by a newer connection"
 
 class InputBackend(Protocol):
     def is_game_focused(self) -> bool: ...
-    def run(self, actions: list[Action]) -> None: ...
+    def run(self, actions: list[Action]) -> str | None: ...  # what a COPY action found
 
 
 class ConnState(StrEnum):
@@ -153,7 +156,23 @@ class BindCheck:
     detail: str = ""
 
 
-type Event = Status | Delivery | Game | VoiceResult | Recording | PadState | MicLevel | BindCheck
+@dataclass(frozen=True, slots=True)
+class Names:
+    """The names and channels from the game the server has now, counted for the window."""
+
+    source: str = ""  # "live" | "file" | "" (none yet, or sending them is off)
+    at: float | None = None  # time.time() when the game made the snapshot
+    me: str = ""  # "Name-Realm" of the character
+    counts: dict[str, int] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, context: GameContext | None) -> Names:
+        if context is None:
+            return cls()
+        return cls(str(context.source), context.at, context.data["me"], context.counts())
+
+
+type Event = Status | Delivery | Game | VoiceResult | Recording | PadState | MicLevel | BindCheck | Names
 type Listener = Callable[[Event], None]
 
 
@@ -163,6 +182,10 @@ class AuthError(RuntimeError):
 
 class ReplacedError(RuntimeError):
     pass
+
+
+def context_message(context: GameContext | None) -> dict[str, Any]:
+    return context.message() if context is not None else {"type": "context_clear"}
 
 
 def ack(cmd: SendCommand, status: str, detail: str = "") -> Ack:
@@ -207,6 +230,7 @@ class Agent:
         self._typing = asyncio.Lock()  # one message at a time, in arrival order
         self._ws: ClientConnection | None = None
         self._voice_waiters: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.context: GameContext | None = None  # sent again after every reconnect
 
     def _emit(self, event: Event) -> None:
         if isinstance(event, Status):
@@ -263,12 +287,47 @@ class Agent:
         self._emit(result)
         return result
 
+    async def export_context(self) -> GameContext | None:
+        """Copy the names and channels the addon has right now, if the game is in front.
+
+        None when the copy did not work: the game lost focus, or an addon without the export
+        did not answer (then nothing in the game has focus, so the agent presses nothing more).
+        """
+        if self.config.mode != Mode.ADDON:
+            return None
+        nonce = secrets.token_hex(4)
+        actions = export_actions(self.config.addon_hotkey, nonce, self.config.open_delay_ms)
+        async with self._typing:
+            if not self.backend.is_game_focused():
+                return None
+            try:
+                copied = await asyncio.to_thread(self.backend.run, actions)
+            except Exception:
+                log.exception("copying names from the game failed")
+                return None
+            context = parse_export(copied, nonce)
+            if context is not None:  # the addon's box holds the snapshot: Enter empties and closes it
+                try:
+                    await asyncio.to_thread(self.backend.run, [Action(Kind.KEY, "enter")])
+                except Exception:
+                    log.exception("closing the addon's box failed")
+        if context is None:
+            log.info("no names from the game: the addon did not answer")
+        else:
+            log.info("names from the game: %s", context.counts())
+        return context
+
+    async def send_context(self, context: GameContext | None) -> None:
+        """Give the server these names and channels (None: forget them); kept for reconnects."""
+        self.context = context
+        if (ws := self._ws) is not None:
+            with contextlib.suppress(ConnectionClosed):
+                await ws.send(json.dumps(context_message(context), ensure_ascii=False))
+
     async def _type(self, cmd: SendCommand) -> Ack:
         if not cmd.parts:
             return ack(cmd, "error", t("net.empty"))
-        async with self._typing:
-            if not await self.wait_for_focus():
-                return ack(cmd, "not_focused")
+        try:
             actions = build_actions(
                 cmd,
                 self.config.mode,
@@ -276,6 +335,11 @@ class Agent:
                 self.config.open_delay_ms,
                 self.config.part_delay_ms,
             )
+        except ValueError as e:
+            return ack(cmd, "error", str(e))
+        async with self._typing:
+            if not await self.wait_for_focus():
+                return ack(cmd, "not_focused")
             try:
                 await asyncio.to_thread(self.backend.run, actions)
             except Exception as e:  # report any input failure back to Telegram
@@ -288,6 +352,8 @@ class Agent:
         await ws.send(json.dumps({"type": "hello", "version": __version__, "mode": self.config.mode}))
         self._ws = ws
         try:
+            if self.context is not None:
+                await ws.send(json.dumps(context_message(self.context), ensure_ascii=False))
             async with asyncio.TaskGroup() as tasks:
                 async for raw in ws:
                     try:
