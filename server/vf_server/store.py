@@ -1,4 +1,4 @@
-"""Per-user settings in SQLite, recent chat history in memory."""
+"""Per-user settings in SQLite; recent chat history and names from the game in memory."""
 
 import sqlite3
 import time
@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 
 from .chat import Channel
+from .gamectx import GameContext
 from .i18n import LANGUAGES, SOURCE, from_code
 from .router import SentRecord
 
@@ -81,6 +82,7 @@ class Store:
             if column not in have:
                 self.db.execute(f"ALTER TABLE ui_state ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
         self._recent: defaultdict[int, deque[SentRecord]] = defaultdict(lambda: deque(maxlen=20))
+        self._game: dict[int, GameContext] = {}  # never written to the database
 
     def get(self, user_id: int) -> UserSettings:
         row = self.db.execute(
@@ -135,3 +137,13 @@ class Store:
 
     def recent(self, user_id: int) -> list[SentRecord]:
         return list(self._recent[user_id])
+
+    def set_game(self, user_id: int, context: GameContext | None) -> None:
+        """Names and channels from the player's game; None forgets them."""
+        if context is None:
+            self._game.pop(user_id, None)
+        elif (old := self._game.get(user_id)) is None or context.made_at >= old.made_at - 1:
+            self._game[user_id] = context
+
+    def game(self, user_id: int) -> GameContext | None:
+        return self._game.get(user_id)

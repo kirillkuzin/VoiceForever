@@ -41,9 +41,13 @@ def test_validate_unknown_channel_uses_default():
     assert msg.channel == "guild" and msg.target == ""
 
 
-def test_validate_channel_needs_number():
-    assert validate("channel", "trade", "wts").channel == "say"
+def test_validate_channel_takes_a_number_or_a_name():
     assert validate("channel", "2", "wts").target == "2"
+    assert validate("channel", " Рейдеры ", "сбор").target == "Рейдеры"
+    assert validate("channel", "Торговля - Город", "wts").target == "Торговля - Город"
+    assert validate("channel", "Рейдеры", "сбор").label("ru") == "Канал Рейдеры"
+    for bad in ("", "/w Вася", "a:b", "x|cff", "2nd", "-dash"):
+        assert validate("channel", bad, "wts").channel == "say", bad
 
 
 def test_channel_is_a_plain_string_on_the_wire():

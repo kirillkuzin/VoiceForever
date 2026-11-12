@@ -279,4 +279,20 @@ async def test_command_menu_in_every_language():
     calls = [r[1] for r in session.requests if r[0] == "setMyCommands"]
     assert [c.get("language_code") for c in calls] == [None, "ru", "de", "es", "fr"]
     assert [c["command"] for c in calls[0]["commands"]] == list(COMMANDS)
-    assert calls[1]["commands"][7] == {"command": "language", "description": "Язык бота"}
+    assert calls[1]["commands"][8] == {"command": "language", "description": "Язык бота"}
+
+
+async def test_channels_and_status_show_what_the_game_sent(bot_env):
+    service, _, send, _, _ = bot_env
+    reply = await send("/channels", code="ru")
+    assert reply["text"].startswith("Каналов из игры пока нет.")
+    assert (await send("/status", code="en"))["text"].endswith("From the game: nothing yet. Channels and nicknames come from the VoiceForever addon through the agent.")
+    service.set_game_context(USER, {
+        "type": "context", "v": 1, "source": "live", "age_s": 125,
+        "channels": [{"n": 1, "name": "Общий"}, {"n": 5, "name": "Рейдеры"}],
+        "group": ["Лиана"], "guild": [{"name": "Арторн", "online": True}, {"name": "Спящий", "online": False}],
+    })
+    reply = await send("/channels", code="ru")
+    assert reply["text"] == "Каналы чата в игре:\n1. Общий\n5. Рейдеры\n\nЧтобы написать в канал, скажи «в канал Рейдеры, …»."
+    reply = await send("/status", code="ru")
+    assert reply["text"].endswith("\nИз игры: каналы 2, гильдия 2 (в сети 1), друзья 0, группа 1. Обновлено 2 мин назад.")
