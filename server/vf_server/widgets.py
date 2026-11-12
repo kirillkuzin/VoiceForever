@@ -32,8 +32,9 @@ from typing import Literal
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.types import Message, ReplyParameters
+from aiogram.types import Message, ReplyParameters, User
 
+from .access import LocalAccess, Player, Refusal
 from .chat import Channel, ChatMessage
 from .hub import AckStatus
 from .i18n import LANGUAGES, SOURCE, from_code, strings, t
@@ -79,8 +80,9 @@ type EditResult = Literal["ok", "gone", "error"]
 
 
 @cache
-def load_html(name: str, lang: str = SOURCE) -> str:
-    """A widget's HTML with its strings in `lang`."""
+def load_html(name: str, lang: str = SOURCE, accounts: bool = False) -> str:
+    """A widget's HTML with its strings in `lang`. `accounts`: players come from an access
+    service, not from VF_USERS, which changes how the setup checklist says the bot knows them."""
     html = (resources.files("vf_server") / "html" / f"{name}.html").read_text(encoding="utf-8")
     own = f"{name}."
     table: dict[str, object] = {
@@ -88,6 +90,8 @@ def load_html(name: str, lang: str = SOURCE) -> str:
         for key, text in strings(lang).items()
         if key.startswith(WIDGET_STRINGS[name])
     }
+    if accounts and "s1_ok_account" in table:
+        table["s1_ok"] = table["s1_ok_account"]
     if name == "panel":
         table["langs"] = [[code, title] for code, title in LANGUAGES.items()]
     # "</" inside a string would end the script element early.
@@ -184,13 +188,12 @@ class WidgetUI:
     def __init__(
         self,
         service: VoiceService,
-        users: set[int],
         download_url: str = "",
         poll_s: float = 3.0,
     ) -> None:
         self.service = service
         self.store = service.store
-        self.users = users
+        self.access = service.access
         self.download_url = download_url
         self.poll_s = poll_s
         self.cards = CardStore()
@@ -201,6 +204,22 @@ class WidgetUI:
 
     def enabled(self, user_id: int) -> bool:
         return self.store.ui(user_id).widgets
+
+    async def player(self, user: User) -> int | Refusal:
+        """The player behind a Telegram user, asked from the access point; their chat is
+        remembered so widgets can be updated later without an update from them."""
+        found = await self.access.resolve_telegram(user.id, user.language_code or "")
+        if isinstance(found, Player):
+            self.store.link_telegram(found.user_id, user.id)
+            return found.user_id
+        return found
+
+    def chat_of(self, uid: int) -> int | None:
+        """The player's private chat with the bot. With VF_USERS the player id is the
+        Telegram ID, which databases from older versions rely on."""
+        if (chat := self.store.telegram_chat(uid)) is not None:
+            return chat
+        return uid if isinstance(self.access, LocalAccess) and uid in self.access.users else None
 
     def lang(self, uid: int, telegram_code: str | None = None) -> str:
         """The player's language: the one they picked, else their Telegram app's, else English.
@@ -228,11 +247,11 @@ class WidgetUI:
 
     # ------------------------------------------------------------------ card
     async def show_card(
-        self, bot: Bot, message: Message, msg: ChatMessage, transcript: str, confirm: bool
-    ) -> bool:
-        """Reply with a card. Without confirmation it is sent to the game right away.
-        False if Telegram refused the widget, so the caller can fall back to text."""
-        uid = message.from_user.id
+        self, bot: Bot, message: Message, uid: int, msg: ChatMessage, transcript: str, confirm: bool
+    ) -> Card | None:
+        """Reply with a card. Without confirmation it is sent to the game right away (see
+        the card's state). None if Telegram refused the widget, so the caller can fall back
+        to text."""
         card = Card(
             id=self.cards.new_id(),
             user_id=uid,
@@ -253,20 +272,20 @@ class WidgetUI:
             ))
         except TelegramAPIError as e:
             log.warning("sendWidget failed, falling back to text: %s", e)
-            return False
+            return None
         card.message_id = sent.message_id
         self.cards.add(card)
         if not confirm:
             await self._deliver(bot, card)
-        return True
+        return card
 
-    def card_for_reply(self, message: Message) -> Card | None:
+    def card_for_reply(self, message: Message, uid: int) -> Card | None:
         """The card a message replies to, if its text can still be changed."""
         reply = message.reply_to_message
-        if reply is None or message.from_user is None:
+        if reply is None:
             return None
         card = self.cards.by_message(message.chat.id, reply.message_id)
-        if card is None or card.user_id != message.from_user.id:
+        if card is None or card.user_id != uid:
             return None
         return card if card.state in ("ask", "fail", "cancel") else None
 
@@ -369,20 +388,22 @@ class WidgetUI:
         return True
 
     async def refresh_panel(self, bot: Bot, uid: int) -> None:
-        if not (msg_id := self.store.ui(uid).panel_msg_id):
+        if not (msg_id := self.store.ui(uid).panel_msg_id) or (chat := self.chat_of(uid)) is None:
             return
-        if await self._edit(bot, uid, msg_id, self.panel_data(uid)) == "gone":
+        if await self._edit(bot, chat, msg_id, self.panel_data(uid)) == "gone":
             self.store.update_ui(uid, panel_msg_id=0)
 
     async def resend_panel(self, bot: Bot, uid: int) -> None:
         """Replace the pinned panel with a new one, for a new language."""
         old = self.store.ui(uid).panel_msg_id
-        if not old or not self.enabled(uid) or not await self.send_panel(bot, uid, uid):
+        if not old or not self.enabled(uid) or (chat := self.chat_of(uid)) is None:
+            return
+        if not await self.send_panel(bot, chat, uid):
             return
         try:
-            await bot.delete_message(chat_id=uid, message_id=old)
+            await bot.delete_message(chat_id=chat, message_id=old)
         except TelegramAPIError:  # too old to delete: let it show the new choice
-            await self._edit(bot, uid, old, self.panel_data(uid))
+            await self._edit(bot, chat, old, self.panel_data(uid))
 
     async def _panel_query(self, bot: Bot, q: WidgetQuery, uid: int, args: list[str]) -> None:
         await self._answer(bot, q)
@@ -430,7 +451,7 @@ class WidgetUI:
         try:
             sent = await bot(SendWidget(
                 chat_id=chat_id,
-                html=load_html("setup", self.lang(uid)),
+                html=load_html("setup", self.lang(uid), not isinstance(self.access, LocalAccess)),
                 width=WIDGET_WIDTH,
                 chat_data=self.setup_data(uid),
                 allow_queries=True,
@@ -446,9 +467,9 @@ class WidgetUI:
         return ui.setup_test == "ok" and bool(ui.setup_voice)
 
     async def refresh_setup(self, bot: Bot, uid: int) -> None:
-        if not (msg_id := self.store.ui(uid).setup_msg_id):
+        if not (msg_id := self.store.ui(uid).setup_msg_id) or (chat := self.chat_of(uid)) is None:
             return
-        if await self._edit(bot, uid, msg_id, self.setup_data(uid)) == "gone":
+        if await self._edit(bot, chat, msg_id, self.setup_data(uid)) == "gone":
             self.store.update_ui(uid, setup_msg_id=0)
 
     async def note_delivery(self, bot: Bot, uid: int, delivery: Delivery) -> None:
@@ -460,8 +481,8 @@ class WidgetUI:
         label = msg.label(self.lang(uid))
         self.store.update_ui(uid, setup_voice=f"[{label}] {msg.text}"[:200])
         await self.refresh_setup(bot, uid)
-        if not ui.panel_msg_id:
-            await self.send_panel(bot, uid, uid)
+        if not ui.panel_msg_id and (chat := self.chat_of(uid)) is not None:
+            await self.send_panel(bot, chat, uid)
 
     async def _setup_query(self, bot: Bot, q: WidgetQuery, uid: int, args: list[str]) -> None:
         await self._answer(bot, q)
@@ -483,8 +504,8 @@ class WidgetUI:
 
     # ------------------------------------------------------------------ queries
     async def on_query(self, bot: Bot, q: WidgetQuery) -> None:
-        uid = q.from_user.id
-        if uid not in self.users:
+        uid = await self.player(q.from_user)
+        if isinstance(uid, Refusal):
             lang = from_code(q.from_user.language_code) or SOURCE
             await self._answer(bot, q, t(lang, "widget.denied"))
             return
@@ -516,9 +537,16 @@ class WidgetUI:
 
     async def watch(self, bot: Bot) -> None:
         """Keep the panel and the setup checklist in step with the agent's connection.
-        The hub is polled (a few users, every few seconds) instead of calling back."""
+        The hub is polled every few seconds instead of calling back. Players to look at:
+        those with an agent online, those last seen online (to notice them leaving) and,
+        once at start, everyone with a panel or checklist from before a restart."""
+        pending = set(self.store.widget_users())
         while True:
-            for uid in self.users:
+            uids = pending | set(self.service.hub.online_users()) | {
+                uid for uid, key in self._agents.items() if key is not None
+            }
+            pending = set()
+            for uid in uids:
                 try:
                     await self.check_agent(bot, uid)
                 except Exception:

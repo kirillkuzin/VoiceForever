@@ -10,29 +10,33 @@ import itertools
 import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import cache
 from typing import Any
 
 from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, Filter
 from aiogram.types import (
     BotCommand,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    LabeledPrice,
     Message,
+    PreCheckoutQuery,
     TelegramObject,
     User,
 )
 
+from .access import Check, LocalAccess, Outcome, Reason, Refusal, Source, StarPayment
 from .chat import Channel, ChatMessage, channel_name
 from .i18n import LANGUAGES, SOURCE, from_code, strings, t
 from .router import Decision, RouteResult
-from .service import Delivery, VoiceService
+from .service import Delivery, VoiceService, with_access_note
 from .stt import TranscriptionError
 from .tgwidgets import WIDGET_UPDATE_TYPES, WidgetQueryMiddleware
-from .widgets import DEFAULT_CHANNELS, STYLE_PRESETS, WidgetUI, failure_text
+from .widgets import DEFAULT_CHANNELS, STYLE_PRESETS, Card, WidgetUI, failure_text
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +63,9 @@ LANGUAGE_NAMES: frozendict[str, str] = frozendict(
 # The command menu, in this order; the descriptions are cmd.<command> in the locales.
 COMMANDS = ("start", "status", "panel", "channel", "confirm", "style", "names", "language",
             "widgets", "help")
+# Added when the access point sells a subscription; Telegram asks for /terms and /paysupport.
+PAYMENT_COMMANDS = ("buy", "terms", "paysupport")
+STARS = "XTR"
 
 
 class PendingMessages:
@@ -168,12 +175,13 @@ def note_text(result: RouteResult, lang: str) -> str:
     return f"\n({t(lang, f'note.{result.note}', code=result.note_code)})"
 
 
-class LanguageMiddleware(BaseMiddleware):
-    """Passes the player's language to handlers as `lang`, noting their Telegram app's."""
+class PlayerMiddleware(BaseMiddleware):
+    """Finds the player behind each update and passes handlers `uid` (None for people the
+    access point does not know), `refusal` (why not) and `lang`. Their Telegram app's
+    language is noted; nothing is stored for strangers."""
 
-    def __init__(self, ui: WidgetUI, allowed: set[int]) -> None:
+    def __init__(self, ui: WidgetUI) -> None:
         self.ui = ui
-        self.allowed = allowed
 
     async def __call__(
         self,
@@ -182,22 +190,54 @@ class LanguageMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user: User | None = data.get("event_from_user")
-        if user is None:
-            data["lang"] = SOURCE
-        elif user.id in self.allowed:
-            data["lang"] = self.ui.lang(user.id, user.language_code)
-        else:  # nothing is stored for strangers
-            data["lang"] = from_code(user.language_code) or SOURCE
+        uid: int | None = None
+        refusal: Refusal | None = None
+        if user is None or user.is_bot:
+            lang = SOURCE
+        else:
+            found = await self.ui.player(user)
+            if isinstance(found, Refusal):
+                refusal, lang = found, from_code(user.language_code) or SOURCE
+            else:
+                uid, lang = found, self.ui.lang(found, user.language_code)
+        data.update(uid=uid, refusal=refusal, lang=lang)
         return await handler(event, data)
 
 
-def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Router:
+class IsPlayer(Filter):
+    """The update is from someone the access point knows (see PlayerMiddleware)."""
+
+    async def __call__(self, event: TelegramObject, uid: int | None = None) -> bool:
+        return uid is not None
+
+
+def access_text(reason: str, lang: str) -> str:
+    """Why the access point refused, for the player; an unknown reason reads as no access."""
+    key = f"access.{reason}"
+    return t(lang, key if key in strings(lang) else "access.no_access")
+
+
+def link_keyboard(link: str, lang: str) -> InlineKeyboardMarkup | None:
+    """A button to the account page, where the player can sign up, subscribe or link Telegram."""
+    if not link.startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t(lang, "bot.account_button"), url=link)]
+    ])
+
+
+def build_router(
+    service: VoiceService, ui: WidgetUI, terms_url: str = "", pay_support: str = ""
+) -> Router:
     router = Router()
     pending = PendingMessages()
-    allowed_filter = F.from_user.id.in_(allowed)
-    languages = LanguageMiddleware(ui, allowed)
-    router.message.middleware(languages)
-    router.callback_query.middleware(languages)
+    is_player = IsPlayer()
+    players = PlayerMiddleware(ui)
+    router.message.outer_middleware(players)
+    router.callback_query.outer_middleware(players)
+    router.pre_checkout_query.outer_middleware(players)
+    access = service.access
+    limit_told: dict[int, str] = {}  # player -> UTC day they were told AI messages ran out
 
     def language_line(uid: int, lang: str) -> str:
         if ui.store.ui(uid).lang in LANGUAGES:
@@ -208,34 +248,48 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
         text = t(lang, "bot.language", name=language_line(uid, lang))
         return text, language_keyboard(lang, ui.store.ui(uid).lang, ui.telegram_lang(uid))
 
+    async def refuse(message: Message, refusal: Refusal | None, lang: str) -> None:
+        """Tell someone the bot does not know why, with a button to fix it if there is one."""
+        refusal = refusal or Refusal(Reason.UNKNOWN)
+        if refusal.reason == Reason.UNKNOWN and isinstance(access, LocalAccess):
+            user = message.from_user
+            text = t(lang, "bot.not_allowed", id=user.id if user else "?")
+        else:
+            text = access_text(refusal.reason, lang)
+        await message.answer(text, reply_markup=link_keyboard(refusal.link, lang))
+
     @router.message(Command("start", "help"))
-    async def start(message: Message, bot: Bot, command: CommandObject, lang: str) -> None:
-        user = message.from_user
-        if user is None or user.id not in allowed:
-            uid = user.id if user else "?"
-            await message.answer(t(lang, "bot.not_allowed", id=uid))
+    async def start(
+        message: Message,
+        bot: Bot,
+        command: CommandObject,
+        lang: str,
+        uid: int | None,
+        refusal: Refusal | None,
+    ) -> None:
+        if uid is None:
+            await refuse(message, refusal, lang)
             return
-        if command.command == "start" and ui.enabled(user.id):
-            if await ui.send_setup(bot, message.chat.id, user.id):
+        if command.command == "start" and ui.enabled(uid):
+            if await ui.send_setup(bot, message.chat.id, uid):
                 return
         await message.answer(t(lang, "bot.help"))
 
-    @router.message(Command("panel"), allowed_filter)
-    async def panel(message: Message, bot: Bot, lang: str) -> None:
-        if not ui.enabled(message.from_user.id):
+    @router.message(Command("panel"), is_player)
+    async def panel(message: Message, bot: Bot, lang: str, uid: int) -> None:
+        if not ui.enabled(uid):
             await message.answer(t(lang, "bot.widgets_disabled"))
-        elif not await ui.send_panel(bot, message.chat.id, message.from_user.id):
+        elif not await ui.send_panel(bot, message.chat.id, uid):
             await message.answer(t(lang, "bot.panel_refused"))
 
-    @router.message(Command("widgets"), allowed_filter)
-    async def set_widgets(message: Message, command: CommandObject, lang: str) -> None:
+    @router.message(Command("widgets"), is_player)
+    async def set_widgets(message: Message, command: CommandObject, lang: str, uid: int) -> None:
         on = (command.args or "").strip().lower() not in OFF_WORDS
-        service.store.update_ui(message.from_user.id, widgets=on)
+        service.store.update_ui(uid, widgets=on)
         await message.answer(t(lang, "bot.widgets_on" if on else "bot.widgets_off"))
 
-    @router.message(Command("status"), allowed_filter)
-    async def status(message: Message, lang: str) -> None:
-        uid = message.from_user.id
+    @router.message(Command("status"), is_player)
+    async def status(message: Message, lang: str, uid: int) -> None:
         s = service.store.get(uid)
         match service.hub.info(uid):
             case None:
@@ -252,45 +306,54 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
             language=language_line(uid, lang),
         ))
 
-    @router.message(Command("channel"), allowed_filter)
-    async def set_channel(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
+    @router.message(Command("channel"), is_player)
+    async def set_channel(
+        message: Message, command: CommandObject, bot: Bot, lang: str, uid: int
+    ) -> None:
         if (channel := parse_channel(command.args or "")) is None:
             await message.answer(t(lang, "bot.channel_usage"))
             return
-        service.store.update(message.from_user.id, default_channel=channel)
+        service.store.update(uid, default_channel=channel)
         await message.answer(t(lang, "bot.channel_set", channel=channel_name(channel, lang)))
-        await ui.refresh_panel(bot, message.from_user.id)
+        await ui.refresh_panel(bot, uid)
 
-    @router.message(Command("confirm"), allowed_filter)
-    async def set_confirm(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
+    @router.message(Command("confirm"), is_player)
+    async def set_confirm(
+        message: Message, command: CommandObject, bot: Bot, lang: str, uid: int
+    ) -> None:
         on = (command.args or "").strip().lower() in ON_WORDS
-        service.store.update(message.from_user.id, confirm=on)
+        service.store.update(uid, confirm=on)
         await message.answer(t(lang, "bot.confirm_set", state=on_off(lang, on)))
-        await ui.refresh_panel(bot, message.from_user.id)
+        await ui.refresh_panel(bot, uid)
 
-    @router.message(Command("style"), allowed_filter)
-    async def set_style(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
+    @router.message(Command("style"), is_player)
+    async def set_style(
+        message: Message, command: CommandObject, bot: Bot, lang: str, uid: int
+    ) -> None:
         if service.router is None or not service.router.allow_transform:
             await message.answer(t(lang, "bot.style_disabled"))
             return
         arg = (command.args or "").strip()
         style = "" if not arg or arg.lower() in OFF_WORDS else arg[:300]
-        service.store.update(message.from_user.id, rewrite_style=style)
+        service.store.update(uid, rewrite_style=style)
         if style and style not in STYLE_PRESETS.values():
-            service.store.update_ui(message.from_user.id, custom_style=style)
+            service.store.update_ui(uid, custom_style=style)
         await message.answer(t(lang, "bot.style_set", style=style) if style else t(lang, "bot.style_off"))
-        await ui.refresh_panel(bot, message.from_user.id)
+        await ui.refresh_panel(bot, uid)
 
-    @router.message(Command("names"), allowed_filter)
-    async def set_names(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
+    @router.message(Command("names"), is_player)
+    async def set_names(
+        message: Message, command: CommandObject, bot: Bot, lang: str, uid: int
+    ) -> None:
         names = ", ".join(n.strip() for n in (command.args or "").split(",") if n.strip())
-        service.store.update(message.from_user.id, known_names=names[:500])
+        service.store.update(uid, known_names=names[:500])
         await message.answer(t(lang, "bot.names_set", names=names or "—"))
-        await ui.refresh_panel(bot, message.from_user.id)
+        await ui.refresh_panel(bot, uid)
 
-    @router.message(Command("language", "lang"), allowed_filter)
-    async def set_language(message: Message, command: CommandObject, bot: Bot, lang: str) -> None:
-        uid = message.from_user.id
+    @router.message(Command("language", "lang"), is_player)
+    async def set_language(
+        message: Message, command: CommandObject, bot: Bot, lang: str, uid: int
+    ) -> None:
         if (picked := parse_language(command.args or "")) is not None:
             lang = await ui.set_lang(bot, uid, picked)
             await message.answer(t(lang, "bot.language_set", name=language_line(uid, lang)))
@@ -298,11 +361,10 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
         text, keyboard = language_menu(uid, lang)
         await message.answer(text, reply_markup=keyboard)
 
-    @router.callback_query(F.data.startswith("lang:"), allowed_filter)
-    async def on_language(query: CallbackQuery, bot: Bot) -> None:
+    @router.callback_query(F.data.startswith("lang:"), is_player)
+    async def on_language(query: CallbackQuery, bot: Bot, uid: int) -> None:
         code = (query.data or "").removeprefix("lang:")
         if code == "auto" or code in LANGUAGES:
-            uid = query.from_user.id
             lang = await ui.set_lang(bot, uid, "" if code == "auto" else code)
             text, keyboard = language_menu(uid, lang)
             if isinstance(query.message, Message):
@@ -310,8 +372,22 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
                     await query.message.edit_text(text, reply_markup=keyboard)
         await query.answer()
 
-    @router.message(allowed_filter, F.voice | F.audio | F.video_note)
-    async def on_voice(message: Message, bot: Bot, lang: str) -> None:
+    async def admit(
+        message: Message, uid: int, lang: str, *, voice: bool, audio_s: float = 0.0
+    ) -> Check | None:
+        """Check before anything that costs money: the agent must be there to type the
+        message, and the access point must allow it. None after telling the player why not."""
+        if service.hub.info(uid) is None:
+            await message.reply(t(lang, "ack.offline"))
+            return None
+        check = await service.admit(uid, Source.TELEGRAM, voice=voice, audio_s=audio_s)
+        if not check.ok:
+            await message.reply(access_text(check.reason, lang), reply_markup=link_keyboard(check.link, lang))
+            return None
+        return check
+
+    @router.message(is_player, F.voice | F.audio | F.video_note)
+    async def on_voice(message: Message, bot: Bot, lang: str, uid: int) -> None:
         match message:
             case Message(voice=voice) if voice:
                 media, filename = voice, "voice.ogg"
@@ -321,39 +397,62 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
                 media, filename = audio, audio.file_name or "audio.mp3"
             case _:
                 return
+        audio_s = float(media.duration or 0)
+        if (check := await admit(message, uid, lang, voice=True, audio_s=audio_s)) is None:
+            return
         buf = io.BytesIO()
         await bot.download(media, destination=buf)
         try:
-            transcript = await service.transcribe(message.from_user.id, buf.getvalue(), filename)
+            transcript = await service.transcribe(uid, buf.getvalue(), filename)
         except TranscriptionError as e:
             log.error("STT failed: %s", e)
+            service.report(check, uid, Source.TELEGRAM, Outcome.STT_ERROR, audio_s)
             await message.reply(t(lang, "bot.stt_failed"))
             return
         if not transcript:
+            service.report(check, uid, Source.TELEGRAM, Outcome.EMPTY, audio_s)
             await message.reply(t(lang, "bot.heard_nothing"))
             return
-        await handle_phrase(message, transcript, bot, lang)
+        await handle_phrase(message, transcript, bot, lang, uid, check, audio_s)
 
-    @router.message(allowed_filter, F.text, ~F.text.startswith("/"))
-    async def on_text(message: Message, bot: Bot, lang: str) -> None:
-        await handle_phrase(message, message.text, bot, lang)
+    @router.message(is_player, F.text, ~F.text.startswith("/"))
+    async def on_text(message: Message, bot: Bot, lang: str, uid: int) -> None:
+        if (check := await admit(message, uid, lang, voice=False)) is not None:
+            await handle_phrase(message, message.text, bot, lang, uid, check)
 
-    async def handle_phrase(message: Message, transcript: str, bot: Bot, lang: str) -> None:
-        uid = message.from_user.id
+    async def handle_phrase(
+        message: Message,
+        transcript: str,
+        bot: Bot,
+        lang: str,
+        uid: int,
+        check: Check,
+        audio_s: float = 0.0,
+    ) -> None:
+        def report(outcome: Outcome) -> None:
+            service.report(check, uid, Source.TELEGRAM, outcome, audio_s, result)
+
         widgets = ui.enabled(uid)
-        card = ui.card_for_reply(message) if widgets else None
-        result = await service.route(uid, transcript)
+        card = ui.card_for_reply(message, uid) if widgets else None
+        result = with_access_note(await service.route(uid, transcript, check.allow), check)
         note = note_text(result, lang)
         if result.decision is Decision.SKIP:
+            report(Outcome.SKIPPED)
             await message.reply(t(lang, "bot.skipped", text=transcript))
             return
         if card is not None:  # a reply to a card replaces the card's text
+            report(Outcome.ROUTED)
             await ui.correct_card(bot, card, result.message, transcript)
             return
         confirm = service.store.get(uid).confirm
-        if widgets and await ui.show_card(bot, message, result.message, transcript, confirm):
+        if widgets and (shown := await ui.show_card(bot, message, uid, result.message, transcript, confirm)):
+            report(Outcome.ROUTED if confirm else card_outcome(shown))
+            if result.note == "ai_limit" and limit_told.get(uid) != (today := utc_day()):
+                limit_told[uid] = today  # cards have no room for notes: say it once a day
+                await message.answer(t(lang, "note.ai_limit"))
             return
         if confirm:
+            report(Outcome.ROUTED)
             pid = pending.add(uid, result.message)
             await message.reply(
                 f"[{result.message.label(lang)}] {result.message.text}{note}",
@@ -361,11 +460,12 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
             )
             return
         delivery = await service.deliver(uid, result.message)
+        report(Outcome.DELIVERED if delivery.ack.ok else Outcome.FAILED)
         await message.reply(describe(delivery, lang) + note)
         await ui.note_delivery(bot, uid, delivery)
 
-    @router.callback_query(F.data.startswith("vf:"), allowed_filter)
-    async def on_button(query: CallbackQuery, bot: Bot, lang: str) -> None:
+    @router.callback_query(F.data.startswith("vf:"), is_player)
+    async def on_button(query: CallbackQuery, bot: Bot, lang: str, uid: int) -> None:
         match (query.data or "").split(":"):
             case ["vf", action, pid, *rest]:
                 pass
@@ -373,7 +473,7 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
                 await query.answer()
                 return
         item = pending.get(pid)
-        if item is None or item[0] != query.from_user.id:
+        if item is None or item[0] != uid:
             await query.answer(t(lang, "bot.stale"))
             return
         _, msg = item
@@ -389,14 +489,26 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
                 )
             case "send", _:
                 pending.pop(pid)
-                delivery = await service.deliver(query.from_user.id, msg)
+                delivery = await service.deliver(uid, msg)
                 await query.message.edit_text(describe(delivery, lang))
-                await ui.note_delivery(bot, query.from_user.id, delivery)
+                await ui.note_delivery(bot, uid, delivery)
         await query.answer()
+
+    if access.payments:
+        add_payments(router, service, terms_url, pay_support)
+
+    # Last: people the access point does not know get told why, in private chats only.
+    @router.message(
+        ~is_player,
+        F.chat.type == "private",
+        F.voice | F.audio | F.video_note | (F.text & ~F.text.startswith("/")),
+    )
+    async def stranger(message: Message, lang: str, refusal: Refusal | None) -> None:
+        await refuse(message, refusal, lang)
 
     @router.startup()
     async def on_startup(bot: Bot) -> None:
-        await set_commands(bot)
+        await set_commands(bot, payments=access.payments)
         ui.start(bot)
 
     @router.shutdown()
@@ -406,11 +518,100 @@ def build_router(service: VoiceService, allowed: set[int], ui: WidgetUI) -> Rout
     return router
 
 
-async def set_commands(bot: Bot) -> None:
+def add_payments(router: Router, service: VoiceService, terms_url: str, pay_support: str) -> None:
+    """/buy: the access point's subscription for Telegram Stars, renewed by Telegram every
+    30 days. The bot only passes the payment on; the access point keeps the subscription.
+    Telegram asks bots that sell to answer /terms and /paysupport."""
+    access = service.access
+    is_player = IsPlayer()
+
+    @router.message(Command("buy"), is_player)
+    async def buy(message: Message, bot: Bot, lang: str, uid: int) -> None:
+        offer = await access.offer(uid, lang)
+        if isinstance(offer, Refusal):
+            await message.answer(access_text(offer.reason, lang), reply_markup=link_keyboard(offer.link, lang))
+            return
+        try:
+            link = await bot.create_invoice_link(
+                title=offer.title[:32],
+                description=(offer.description or offer.title)[:255],
+                payload=offer.payload,
+                currency=STARS,
+                prices=[LabeledPrice(label=offer.title[:32], amount=offer.stars)],
+                subscription_period=offer.period_s,
+            )
+        except TelegramAPIError as e:
+            log.warning("createInvoiceLink failed: %s", e)
+            await message.answer(t(lang, "bot.buy_failed"))
+            return
+        button = InlineKeyboardButton(text=t(lang, "bot.buy_button", stars=offer.stars), url=link)
+        await message.answer(
+            t(lang, "bot.buy", title=offer.title, stars=offer.stars),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[button]]),
+        )
+
+    @router.pre_checkout_query()
+    async def pre_checkout(
+        query: PreCheckoutQuery, lang: str, uid: int | None, refusal: Refusal | None
+    ) -> None:
+        if uid is None:
+            refused: Refusal | None = refusal or Refusal(Reason.UNKNOWN)
+        elif query.currency != STARS:
+            refused = Refusal(Reason.NO_ACCESS)
+        else:
+            refused = await access.pre_checkout(uid, query.invoice_payload, query.currency, query.total_amount)
+        if refused is None:
+            await query.answer(ok=True)
+        else:
+            await query.answer(ok=False, error_message=access_text(refused.reason, lang))
+
+    @router.message(F.successful_payment)
+    async def paid(message: Message, lang: str, uid: int | None) -> None:
+        p = message.successful_payment
+        payment = StarPayment(
+            telegram_id=message.from_user.id if message.from_user else 0,
+            payload=p.invoice_payload,
+            currency=p.currency,
+            total_amount=p.total_amount,
+            telegram_payment_charge_id=p.telegram_payment_charge_id,
+            is_recurring=bool(p.is_recurring),
+            is_first_recurring=bool(p.is_first_recurring),
+            subscription_expiration_date=p.subscription_expiration_date or 0,
+        )
+        log.info("Stars payment from %s: %s %s", payment.telegram_id, p.total_amount, p.currency)
+        account = await access.paid(uid or 0, payment)
+        if uid is not None and account is not None:
+            await service.hub.send_account(uid, account)
+        if until := payment.subscription_expiration_date:
+            day = datetime.fromtimestamp(until, UTC).strftime("%Y-%m-%d")
+            await message.answer(t(lang, "bot.paid_until", date=day))
+        else:
+            await message.answer(t(lang, "bot.paid"))
+
+    @router.message(Command("terms"))
+    async def terms(message: Message, lang: str) -> None:
+        await message.answer(t(lang, "bot.terms", url=terms_url or "—"))
+
+    @router.message(Command("paysupport"))
+    async def paysupport(message: Message, lang: str) -> None:
+        await message.answer(t(lang, "bot.paysupport", contact=pay_support or terms_url or "—"))
+
+
+def card_outcome(card: Card) -> Outcome:
+    """A card sent without confirmation has tried the game by the time it is shown."""
+    return Outcome.DELIVERED if card.state == "sent" else Outcome.FAILED
+
+
+def utc_day() -> str:
+    return datetime.now(UTC).strftime("%Y-%m-%d")
+
+
+async def set_commands(bot: Bot, payments: bool = False) -> None:
     """The command menu in each language; Telegram shows the one matching the app's
     language and English to everyone else."""
+    names = COMMANDS + (PAYMENT_COMMANDS if payments else ())
     for lang in LANGUAGES:
-        commands = [BotCommand(command=c, description=t(lang, f"cmd.{c}")) for c in COMMANDS]
+        commands = [BotCommand(command=c, description=t(lang, f"cmd.{c}")) for c in names]
         try:
             await bot.set_my_commands(commands, language_code=None if lang == SOURCE else lang)
         except TelegramAPIError as e:
@@ -418,10 +619,14 @@ async def set_commands(bot: Bot) -> None:
 
 
 def setup_bot(
-    dp: Dispatcher, service: VoiceService, allowed: set[int], download_url: str = ""
+    dp: Dispatcher,
+    service: VoiceService,
+    download_url: str = "",
+    terms_url: str = "",
+    pay_support: str = "",
 ) -> list[str]:
     """Wire the bot into the dispatcher. Returns allowed_updates for polling."""
-    ui = WidgetUI(service, allowed, download_url)
-    dp.include_router(build_router(service, allowed, ui))
+    ui = WidgetUI(service, download_url)
+    dp.include_router(build_router(service, ui, terms_url, pay_support))
     dp.update.outer_middleware(WidgetQueryMiddleware(ui.on_query))
     return [*dp.resolve_used_update_types(), *WIDGET_UPDATE_TYPES]

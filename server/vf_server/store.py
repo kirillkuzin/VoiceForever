@@ -1,4 +1,9 @@
-"""Per-user settings in SQLite, recent chat history in memory."""
+"""Per-user settings in SQLite, recent chat history in memory.
+
+`user_id` is the player id from the access point. With VF_USERS it is the number before the
+token (the Telegram ID, as in earlier versions); with an access service it is the account id.
+The `telegram` table remembers which Telegram chat belongs to which player.
+"""
 
 import sqlite3
 import time
@@ -75,6 +80,12 @@ class Store:
                    tg_lang TEXT NOT NULL DEFAULT ''
                ) STRICT"""
         )
+        self.db.execute(
+            """CREATE TABLE IF NOT EXISTS telegram (
+                   user_id INTEGER PRIMARY KEY,
+                   telegram_id INTEGER NOT NULL UNIQUE
+               ) STRICT"""
+        )
         # Databases made by an older version get the columns added since.
         have = {row[1] for row in self.db.execute("PRAGMA table_info(ui_state)")}
         for column in ("lang", "tg_lang"):
@@ -129,6 +140,30 @@ class Store:
             {"user_id": user_id, **values},
         )
         return current
+
+    def link_telegram(self, user_id: int, telegram_id: int) -> None:
+        """The player writes to the bot from this Telegram account (one account per player)."""
+        if self.telegram_chat(user_id) == telegram_id:
+            return
+        self.db.execute("DELETE FROM telegram WHERE telegram_id = ? AND user_id != ?",
+                        (telegram_id, user_id))
+        self.db.execute(
+            """INSERT INTO telegram (user_id, telegram_id) VALUES (?, ?)
+               ON CONFLICT(user_id) DO UPDATE SET telegram_id = excluded.telegram_id""",
+            (user_id, telegram_id),
+        )
+
+    def telegram_chat(self, user_id: int) -> int | None:
+        """The player's private chat with the bot, which has the id of their Telegram account."""
+        row = self.db.execute("SELECT telegram_id FROM telegram WHERE user_id = ?", (user_id,)).fetchone()
+        return row[0] if row else None
+
+    def widget_users(self) -> list[int]:
+        """Players with a pinned panel or a setup checklist to keep up to date."""
+        rows = self.db.execute(
+            "SELECT user_id FROM ui_state WHERE panel_msg_id != 0 OR setup_msg_id != 0"
+        )
+        return [row[0] for row in rows]
 
     def remember(self, user_id: int, channel: Channel, target: str, text: str) -> None:
         self._recent[user_id].append(SentRecord(time.time(), channel, target, text))
