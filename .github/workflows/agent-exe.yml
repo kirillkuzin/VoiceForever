@@ -136,10 +136,11 @@ jobs:
           name: VoiceForeverAgent
           path: release
       - name: Package the addon
-        # The license text travels inside the addon folder.
+        # The license text travels inside the addon folder. The file names stay the same in
+        # every release, so .../releases/latest/download/<name> always gets the newest one.
         run: |
           cp LICENSE addon/VoiceForever/LICENSE
-          (cd addon && zip -r "../release/VoiceForever-addon-${GITHUB_REF_NAME}.zip" VoiceForever)
+          (cd addon && zip -r "../release/VoiceForever-addon.zip" VoiceForever)
       - name: Checksums
         run: (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Publish the release
