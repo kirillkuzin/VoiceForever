@@ -16,6 +16,7 @@ from typing import Any
 
 import anthropic
 
+from .access import TokenUsage
 from .chat import Channel, ChatMessage, validate
 
 log = logging.getLogger(__name__)
@@ -59,6 +60,7 @@ class RouteResult:
     source: str  # "llm" or "rules"
     note: str = ""  # why the rules were used: a key under note.* in the locales, e.g. "llm_down"
     note_code: int = 0  # the LLM's HTTP status for note "llm_error"
+    usage: TokenUsage | None = None  # what the Claude request used, if one was made
 
 
 # --------------------------------------------------------------------------- rules
@@ -160,7 +162,22 @@ _FALLBACK_PREFIXES = ("claude-opus-5", "claude-fable-5", "claude-sonnet-5-5")
 
 
 class RouterOutputError(Exception):
-    pass
+    def __init__(self, reason: str, usage: TokenUsage | None = None) -> None:
+        super().__init__(reason)
+        self.usage = usage
+
+
+def token_usage(response: Any) -> TokenUsage | None:
+    """The tokens a response used, for the cost report; None if it carries no usage."""
+    if (u := getattr(response, "usage", None)) is None:
+        return None
+    return TokenUsage(
+        model=str(getattr(response, "model", "") or ""),
+        input_tokens=getattr(u, "input_tokens", 0) or 0,
+        output_tokens=getattr(u, "output_tokens", 0) or 0,
+        cache_read_tokens=getattr(u, "cache_read_input_tokens", 0) or 0,
+        cache_write_tokens=getattr(u, "cache_creation_input_tokens", 0) or 0,
+    )
 
 
 class LLMRouter:
@@ -196,11 +213,11 @@ class LLMRouter:
         return json.dumps(payload, ensure_ascii=False)
 
     async def route(self, transcript: str, ctx: RouteContext) -> RouteResult:
-        def fallback(note: str, code: int = 0) -> RouteResult:
-            return replace(rule_route(transcript, ctx), note=note, note_code=code)
+        def fallback(note: str, code: int = 0, usage: TokenUsage | None = None) -> RouteResult:
+            return replace(rule_route(transcript, ctx), note=note, note_code=code, usage=usage)
 
         try:
-            data = await self._ask(self.build_input(transcript, ctx))
+            data, usage = await self._ask(self.build_input(transcript, ctx))
         except anthropic.RateLimitError:
             log.warning("LLM rate limited, using rules")
             return fallback("llm_limit")
@@ -212,14 +229,14 @@ class LLMRouter:
             return fallback("llm_down")
         except RouterOutputError as e:
             log.warning("LLM output unusable (%s), using rules", e)
-            return fallback("llm_format")
+            return fallback("llm_format", usage=e.usage)
 
         msg = validate(data["channel"], data["target"], data["text"], ctx.default_channel)
         if data["action"] == Decision.SKIP or not msg.text:
-            return RouteResult(Decision.SKIP, msg, "llm")
-        return RouteResult(Decision.SEND, msg, "llm")
+            return RouteResult(Decision.SKIP, msg, "llm", usage=usage)
+        return RouteResult(Decision.SEND, msg, "llm", usage=usage)
 
-    async def _ask(self, user_input: str) -> dict[str, str]:
+    async def _ask(self, user_input: str) -> tuple[dict[str, str], TokenUsage | None]:
         request: dict[str, Any] = {
             "model": self.model,
             "max_tokens": 4000,
@@ -237,16 +254,17 @@ class LLMRouter:
         else:
             response = await self.client.messages.create(**request)
 
+        usage = token_usage(response)
         match response.stop_reason:
             case "refusal" | "max_tokens" as reason:
-                raise RouterOutputError(reason)
+                raise RouterOutputError(reason, usage)
         text = next((b.text for b in response.content if b.type == "text"), "")
         try:
             data = json.loads(text)
         except json.JSONDecodeError as e:
-            raise RouterOutputError(f"bad json: {e}") from e
+            raise RouterOutputError(f"bad json: {e}", usage) from e
         match data:
             case {"action": str(), "channel": str(), "target": str(), "text": str()}:
-                return data
+                return data, usage
             case _:
-                raise RouterOutputError("missing fields")
+                raise RouterOutputError("missing fields", usage)

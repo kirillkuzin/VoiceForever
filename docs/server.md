@@ -53,14 +53,16 @@ Required variables:
 
 | Variable | What to put there |
 |---|---|
-| `VF_TELEGRAM_TOKEN` | the bot token from BotFather |
+| `VF_TELEGRAM_TOKEN` | the bot token from BotFather; leave it empty to run without the bot, the Windows app only |
 | `VF_USERS` | `<Telegram ID>:<agent token>`; make a token with `python3 -c "import secrets;print(secrets.token_urlsafe(32))"` |
 | `ANTHROPIC_API_KEY` | your Claude API key |
 | `VF_STT_BASE_URL`, `VF_STT_API_KEY`, `VF_STT_MODEL` | speech recognition, OpenAI `gpt-4o-mini-transcribe` by default |
 
 You learn your Telegram ID from the bot itself, so start with `VF_USERS=1:<agent token>`, run the server, send `/start` to the bot and replace `1` with the number from its answer.
 
-Everything else is explained in the comments in `.env`: the Claude model, known character names, the message length limit, the longest gamepad recording (`VF_MAX_VOICE_S`).
+Everything else is explained in the comments in `.env`: the Claude model, known character names, the message length limit, the longest gamepad recording (`VF_MAX_VOICE_S`), messages per player per minute (`VF_RATE_PER_MIN`).
+
+To serve many players with accounts and limits, replace `VF_USERS` with a service of your own: [access-api.md](access-api.md).
 
 ### Your own Whisper
 
@@ -150,5 +152,5 @@ Without Docker: `cd server && uv run --env-file ../.env voiceforever-server`. Fo
 
 ## Security
 
-- The bot answers only users listed in `VF_USERS`; each Windows app connects with its own secret token.
+- The bot answers only users listed in `VF_USERS` (or known to the access service); each Windows app connects with its own secret token.
 - The server and the app strip `|` and a leading `/` or `.` from every message, so a voice message cannot run a game command.

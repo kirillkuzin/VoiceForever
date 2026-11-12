@@ -13,7 +13,8 @@ def _bool(value: str | None, default: bool) -> bool:
 
 
 def parse_users(raw: str) -> frozendict[int, str]:
-    """Parse VF_USERS="telegram_id:agent_token,telegram_id:agent_token"."""
+    """Parse VF_USERS="player_id:agent_token,player_id:agent_token". With the Telegram bot
+    the player id is the player's Telegram ID."""
     users: dict[int, str] = {}
     for item in filter(None, (i.strip() for i in raw.split(","))):
         tg_id, sep, token = item.partition(":")
@@ -27,8 +28,18 @@ def parse_users(raw: str) -> frozendict[int, str]:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Settings:
-    telegram_token: str
-    users: frozendict[int, str]  # telegram user id -> agent token
+    telegram_token: str  # "" = no Telegram bot, agents only
+    users: frozendict[int, str]  # player id (Telegram ID) -> agent token
+
+    # An access service (accounts, plans, limits) instead of VF_USERS; see docs/access-api.md.
+    access_url: str = ""
+    access_secret: str = ""
+    access_timeout_s: float = 2.0
+    # Messages per player per minute, voice and text together; 0 = no limit.
+    rate_per_min: int = 20
+    # Answers to /terms and /paysupport, which Telegram asks of bots that sell (/buy).
+    terms_url: str = ""
+    pay_support: str = ""
 
     # Speech-to-text: any OpenAI-compatible /audio/transcriptions endpoint
     # (OpenAI, Groq, or a self-hosted faster-whisper server such as speaches).
@@ -60,14 +71,24 @@ class Settings:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> Self:
-        if not (token := env.get("VF_TELEGRAM_TOKEN", "")):
-            raise ValueError("VF_TELEGRAM_TOKEN is required")
-        if not (users := parse_users(env.get("VF_USERS", ""))):
+        access_url = env.get("VF_ACCESS_URL", "").strip()
+        users = parse_users(env.get("VF_USERS", ""))
+        if not access_url and not users:
             raise ValueError("VF_USERS is required, e.g. 123456789:long-random-agent-token")
+        if access_url and users:
+            raise ValueError("Set either VF_USERS or VF_ACCESS_URL, not both")
+        if access_url and not env.get("VF_ACCESS_SECRET", ""):
+            raise ValueError("VF_ACCESS_SECRET is required with VF_ACCESS_URL")
         defaults = cls(telegram_token="", users=frozendict())
         return cls(
-            telegram_token=token,
+            telegram_token=env.get("VF_TELEGRAM_TOKEN", "").strip(),
             users=users,
+            access_url=access_url,
+            access_secret=env.get("VF_ACCESS_SECRET", ""),
+            access_timeout_s=float(env.get("VF_ACCESS_TIMEOUT_S", defaults.access_timeout_s)),
+            rate_per_min=int(env.get("VF_RATE_PER_MIN", defaults.rate_per_min)),
+            terms_url=env.get("VF_TERMS_URL", ""),
+            pay_support=env.get("VF_PAY_SUPPORT", ""),
             stt_base_url=env.get("VF_STT_BASE_URL", defaults.stt_base_url).rstrip("/"),
             stt_api_key=env.get("VF_STT_API_KEY", ""),
             stt_model=env.get("VF_STT_MODEL", defaults.stt_model),

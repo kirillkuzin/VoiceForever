@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 from aiogram.types import Update
 
+from vf_server.access import LocalAccess
 from vf_server.chat import Channel, ChatMessage
 from vf_server.hub import Ack, AckStatus, AgentInfo
 from vf_server.service import VoiceService
@@ -29,13 +30,21 @@ WIDGETS = ("card", "panel", "setup")
 
 
 class FakeHub:
-    def __init__(self) -> None:
+    def __init__(self, access=None) -> None:
+        self.access = access or LocalAccess({USER: "t" * 16})
         self.status = AckStatus.OK
         self.online = True
         self.sent: list[ChatMessage] = []
+        self.accounts: list = []
 
     def info(self, user_id):
         return AgentInfo("0.3.0", "addon") if self.online else None
+
+    def online_users(self):
+        return [USER] if self.online else []
+
+    async def send_account(self, user_id, account):
+        self.accounts.append((user_id, dict(account)))
 
     async def send(self, user_id, msg, parts, *args):
         self.sent.append(msg)
@@ -72,7 +81,7 @@ class FakeBot:
 def make_ui(router=SimpleNamespace(allow_transform=True)):
     hub = FakeHub()
     service = VoiceService(Store(":memory:"), hub, transcriber=None, router=router)
-    return WidgetUI(service, {USER}, download_url="https://example.com/agent"), hub
+    return WidgetUI(service, download_url="https://example.com/agent"), hub
 
 
 def tg_message(message_id=10, reply_to=None, user=USER):
@@ -163,7 +172,7 @@ async def test_card_with_confirmation_waits_for_tap():
     ui.service.store.update(USER, known_names="Арторн, Лиана")
     bot = FakeBot()
     msg = ChatMessage(Channel.GUILD, "", "Отойду на 5 минут")
-    assert await ui.show_card(bot, tg_message(), msg, "в гильдию отойду", confirm=True)
+    assert await ui.show_card(bot, tg_message(), USER, msg, "в гильдию отойду", confirm=True)
 
     sent = bot.of(SendWidget)[0]
     data = json.loads(sent.chat_data)
@@ -181,7 +190,7 @@ async def test_card_with_confirmation_waits_for_tap():
 async def test_card_without_confirmation_goes_straight_to_the_game():
     ui, hub = make_ui()
     bot = FakeBot()
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.SAY, "", "Привет"), "привет", False)
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.SAY, "", "Привет"), "привет", False)
     assert json.loads(bot.of(SendWidget)[0].chat_data)["s"] == "busy"
     assert hub.sent == [ChatMessage(Channel.SAY, "", "Привет")]
     assert bot.states()[-1] == "sent"
@@ -191,7 +200,7 @@ async def test_failed_card_can_be_retried():
     ui, hub = make_ui()
     hub.status = AckStatus.NOT_FOCUSED
     bot = FakeBot()
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.GROUP, "", "Иду"), "иду", False)
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.GROUP, "", "Иду"), "иду", False)
     last = json.loads(bot.of(EditMessageWidgetData)[-1].chat_data)
     assert last["s"] == "fail" and last["e"] == t("en", "ack.not_focused")
 
@@ -203,7 +212,7 @@ async def test_failed_card_can_be_retried():
 async def test_cancel_undo_and_stale_cards():
     ui, hub = make_ui()
     bot = FakeBot()
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.SAY, "", "Ну"), "ну", True)
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.SAY, "", "Ну"), "ну", True)
     card_id = json.loads(bot.of(SendWidget)[0].chat_data)["i"]
 
     await ui.on_query(bot, query(f"x:{card_id}"))
@@ -220,10 +229,10 @@ async def test_cancel_undo_and_stale_cards():
 async def test_reply_to_card_changes_its_text():
     ui, _ = make_ui()
     bot = FakeBot()
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.SAY, "", "Првиет"), "првиет", True)
-    card = ui.card_for_reply(tg_message(message_id=11, reply_to=100))
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.SAY, "", "Првиет"), "првиет", True)
+    card = ui.card_for_reply(tg_message(message_id=11, reply_to=100), USER)
     assert card is not None
-    assert ui.card_for_reply(tg_message(message_id=11, reply_to=100, user=7)) is None
+    assert ui.card_for_reply(tg_message(message_id=11, reply_to=100, user=7), 7) is None
 
     await ui.correct_card(bot, card, ChatMessage(Channel.SAY, "", "Привет"), "привет")
     assert json.loads(bot.of(EditMessageWidgetData)[-1].chat_data)["x"] == "Привет"
@@ -306,7 +315,7 @@ async def test_setup_checklist_walkthrough():
     assert store.ui(USER).setup_test == "ok"
 
     # The next phrase that reaches the game completes the list and pins the panel.
-    await ui.show_card(bot, tg_message(), ChatMessage(Channel.GUILD, "", "Всем привет!"), "", False)
+    await ui.show_card(bot, tg_message(), USER, ChatMessage(Channel.GUILD, "", "Всем привет!"), "", False)
     assert store.ui(USER).setup_voice == "[Guild] Всем привет!"
     assert store.ui(USER).panel_msg_id and ("pin", store.ui(USER).panel_msg_id) in bot.calls
     assert ui.setup_done(USER)
