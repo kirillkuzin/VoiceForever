@@ -11,14 +11,21 @@
 -- Lines with channel "ptt" set the button up; lines with channel "status" end the badge
 -- when the server could not send anything.
 --
+-- Names and channels: Context.lua keeps what the game knows about the people and channels
+-- around the player. "VF:export:<nonce>:" hands it to the agent (see there), and
+-- "VF:channel:<name>:<text>" finds the channel's number by its name at the moment of sending,
+-- so a message never goes to another channel that took over an old number.
+--
 -- Texts come from Locales.lua, in the language of the WoW client.
 
 local _, ns = ...
 local L, T = ns.L, ns.T
+local Context = ns.Context
 
 local PREFIX = "VF"
 local DEFAULT_KEY = "CTRL-SHIFT-F12"
 local FOCUS_TIMEOUT = 3 -- seconds; drop focus if the agent never pressed Enter
+local EXPORT_TIMEOUT = 1 -- seconds the snapshot stays in the box for the agent's Ctrl+C
 local MIN_RECORD = 0.3 -- seconds; shorter presses are accidents, the agent drops them too
 local PENDING_TIMEOUT = 40 -- seconds to wait for the message of a recording
 local TOAST_TIME = 4
@@ -99,9 +106,15 @@ function VoiceForever_Resolve(channel, target)
         end
         return "WHISPER", name
     elseif channel == "channel" then
-        local number = tonumber(target)
-        if not number then
+        if target == "" then
             return nil, L.bad_channel_number
+        end
+        if target:match("^%d+$") then
+            return "CHANNEL", tonumber(target)
+        end
+        local number = Context.findChannel(target)
+        if not number then
+            return nil, T("not_in_channel", target)
         end
         return "CHANNEL", number
     elseif channel == "guild" or channel == "officer" then
@@ -119,6 +132,7 @@ end
 
 local Badge -- defined below, used by deliver()
 local handleControl
+local startExport
 
 local function deliver(line)
     local channel, target, text = VoiceForever_Parse(line)
@@ -130,6 +144,10 @@ local function deliver(line)
     end
     if channel == "ptt" or channel == "status" then
         handleControl(channel, target, text)
+        return
+    end
+    if channel == "export" then
+        startExport(target)
         return
     end
     if text == "" then
@@ -157,17 +175,22 @@ end
 local box = CreateFrame("EditBox", "VoiceForeverEditBox", UIParent)
 box:SetAutoFocus(false)
 box:SetFontObject(ChatFontNormal)
-box:SetMaxLetters(1000)
+box:SetMaxLetters(0) -- no limit: the export line holds the whole snapshot
 box:SetSize(200, 20)
 box:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
 box:SetAlpha(0)
 box:SetScript("OnEnterPressed", function(self)
     local line = self:GetText() or ""
+    local exported = self.exporting
+    self.exporting = nil
     self:SetText("")
     self:ClearFocus()
-    deliver(line)
+    if not exported then -- after an export, Enter only closes the box
+        deliver(line)
+    end
 end)
 box:SetScript("OnEscapePressed", function(self)
+    self.exporting = nil
     self:SetText("")
     self:ClearFocus()
 end)
@@ -175,12 +198,26 @@ box:SetScript("OnEditFocusGained", function(self)
     self.focusedAt = GetTime()
 end)
 box:SetScript("OnUpdate", function(self)
-    if self.focusedAt and self:HasFocus() and GetTime() - self.focusedAt > FOCUS_TIMEOUT then
+    local limit = self.exporting and EXPORT_TIMEOUT or FOCUS_TIMEOUT
+    if self.focusedAt and self:HasFocus() and GetTime() - self.focusedAt > limit then
         self.focusedAt = nil
+        self.exporting = nil
         self:SetText("")
         self:ClearFocus()
     end
 end)
+
+-- The agent asked for the snapshot: show it in the box, selected, for its Ctrl+C. Its Enter
+-- (or the focus timeout) then empties the box.
+startExport = function(nonce)
+    if not nonce:match("^%w+$") then
+        return
+    end
+    box.exporting = true
+    box:SetText(Context.exportLine(nonce))
+    box:SetFocus()
+    box:HighlightText()
+end
 
 -- Hidden button the key binding clicks.
 local button = CreateFrame("Button", "VoiceForeverFocusButton", UIParent)
@@ -403,12 +440,25 @@ end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
+events:RegisterEvent("PLAYER_LOGOUT")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
-events:SetScript("OnEvent", function(_, event)
+for _, event in ipairs(Context.events()) do
+    events:RegisterEvent(event)
+end
+events:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_LOGIN" then
         VoiceForeverDB = VoiceForeverDB or {}
         VoiceForeverDB.key = VoiceForeverDB.key or DEFAULT_KEY
         applyBinding()
+        Context.restore(VoiceForeverDB)
+        Context.start()
+    elseif event == "PLAYER_LOGOUT" then
+        -- Comes right before the game writes SavedVariables, on logout and on /reload.
+        if VoiceForeverDB then
+            Context.save(VoiceForeverDB)
+        end
+    elseif event:match("^CHAT_MSG_") then
+        Context.onChat(event, ...)
     elseif event == "PLAYER_REGEN_ENABLED" then
         if bindingPending then
             applyBinding()
@@ -431,6 +481,14 @@ SlashCmdList.VOICEFOREVER = function(msg)
         print(T("key_set", VoiceForeverDB.key))
     elseif cmd == "test" then
         deliver(PREFIX .. ":group::" .. L.test_line)
+    elseif cmd == "names" then
+        local s, online = Context.counts()
+        local channels = {}
+        for _, ch in ipairs(s.channels) do
+            table.insert(channels, ch.n .. ". " .. ch.name)
+        end
+        print(T("names_info", #channels > 0 and table.concat(channels, ", ") or L.no_channels,
+            #s.group, #s.guild, online, #s.friends, #s.whispers, #s.speakers))
     elseif cmd == "ptt" and rest == "off" then
         VoiceForeverDB.ptt = nil
         applyBinding()
