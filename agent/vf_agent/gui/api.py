@@ -18,6 +18,7 @@ from ..client import (
     Event,
     Game,
     MicLevel,
+    Names,
     PadState,
     Recording,
     Status,
@@ -92,6 +93,8 @@ def event_json(seq: int, event: Event) -> dict[str, Any]:
             return {"type": "mic", "seq": seq, "level": level}
         case BindCheck():
             return {"type": "bind_check", "seq": seq, "check": dataclasses.asdict(event)}
+        case Names():
+            return {"type": "names", "seq": seq, "names": dataclasses.asdict(event)}
         case Account():
             return {"type": "account", "seq": seq, "account": account_json(event)}
 
@@ -141,6 +144,7 @@ class Api:
             "pad": dataclasses.asdict(snapshot["pad"]),
             "recording": recording_json(snapshot["recording"]),
             "bind_check": dataclasses.asdict(c) if (c := snapshot["bind_check"]) else None,
+            "names": dataclasses.asdict(snapshot["names"]),
             "pad_buttons": pad_buttons_json(),
             "account": account_json(snapshot.get("account")),
         }

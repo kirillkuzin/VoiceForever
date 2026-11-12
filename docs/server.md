@@ -123,6 +123,8 @@ Any service with an OpenAI-compatible `/audio/transcriptions` works:
 
 `VF_STT_LANGUAGE` locks recognition to one language (a code such as `en` or `ru`); when it is empty, the model detects the spoken language. `VF_STT_PROMPT` is a hint with words that recognition often gets wrong, such as game slang or character names.
 
+The hint also gets up to 30 nicknames: the player's `/names`, then the likeliest ones from the game (the people they whisper with, their group, guild and friends online) and the names of their chat channels. Whisper models read only about 224 tokens of hint, so the list stays short. The nicknames from the game live in the server's memory only: a restart forgets them until the Windows app sends them again, and the log shows only how many there are.
+
 ## Claude
 
 Claude picks the chat channel, removes the routing words and fixes punctuation. The default model is `claude-opus-5-5` with `effort=low`, with server-side fallbacks in case the model refuses. If Claude is unavailable or answers in the wrong format, a simple keyword parser takes over (it knows Russian phrases such as «в пати…», «шепни…»), so the message still goes out.

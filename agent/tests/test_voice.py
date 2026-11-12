@@ -16,7 +16,7 @@ from vf_server.hub import AgentHub  # noqa: E402
 
 from vf_agent import audio  # noqa: E402
 from vf_agent import controller as controller_module  # noqa: E402
-from vf_agent.client import BindCheck, ConnState, PadState, RecState, Recording, VoiceResult  # noqa: E402
+from vf_agent.client import BindCheck, ConnState, Names, PadState, RecState, Recording, VoiceResult  # noqa: E402
 from vf_agent.config import AgentConfig  # noqa: E402
 from vf_agent.controller import Controller  # noqa: E402
 from vf_agent.devices import Pad, Press  # noqa: E402
@@ -72,6 +72,7 @@ class FakeBackend:
         self.game = GameState.ACTIVE
         self.exe = exe
         self.runs = []
+        self.answer = None  # what the addon puts in its box when asked for names: nonce -> text
 
     def is_game_focused(self):
         return self.game is GameState.ACTIVE
@@ -84,9 +85,17 @@ class FakeBackend:
 
     def run(self, actions):
         self.runs.append(actions)
+        for a in actions:
+            if a.kind == "copy":
+                nonce = a.value.split()[1]
+                return self.answer(nonce) if self.answer else None
+        return None
+
+    def exports(self):
+        return [a.value for run in self.runs for a in run if a.kind == "paste" and a.value.startswith("VF:export:")]
 
     def pastes(self):
-        return [a.value for run in self.runs for a in run if a.kind == "paste"]
+        return [a.value for run in self.runs for a in run if a.kind == "paste" and not a.value.startswith("VF:export:")]
 
 
 async def until(predicate, timeout=5.0):
@@ -98,11 +107,14 @@ async def until(predicate, timeout=5.0):
 @pytest.fixture
 async def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(controller_module, "GAME_POLL_S", 0.05)
+    monkeypatch.setattr(controller_module, "SAVED_NAMES_EVERY_S", 0.05)
     hub = AgentHub({1: TOKEN}, ack_timeout_s=3)
-    replies = {"status": None}
+    replies = {"status": None, "contexts": [], "contexts_at_voice": None}
+    hub.context_handler = lambda user_id, data: replies["contexts"].append(data)
 
     async def voice_handler(user_id, upload):
         assert upload.format == "wav" and upload.duration_ms == 1000
+        replies["contexts_at_voice"] = len(replies["contexts"])
         if replies["status"] is not None:
             return {"status": replies["status"], "detail": "x"}
         message = ChatMessage(Channel.GUILD, "", "Всем привет")
@@ -303,3 +315,72 @@ async def test_addon_gets_a_changed_mode(setup, monkeypatch):
 def test_server_cannot_send_control_lines():
     with pytest.raises(ValueError):
         SendCommand.from_json({"id": "1", "channel": "ptt", "parts": ["setup"]})
+
+
+# ---------------------------------------------------------------- names from the game
+EXPORT = (
+    '{"at":1762950000,"channels":[{"n":5,"name":"Рейдеры"}],"friends":[],"group":["Арторн"],'
+    '"guild":[{"name":"Лиана","online":true}],"me":"Кирилл-Пламегор","speakers":[],"v":1,'
+    '"whispers":[{"ago":3,"dir":"in","name":"Варг"}]}'
+)
+
+
+async def record_once(pad, events):
+    count = len(of(events, VoiceResult))
+    pad.press("rightstick")
+    await until(lambda: pad.open)
+    await asyncio.sleep(0.35)
+    pad.press("rightstick")
+    await until(lambda: len(of(events, VoiceResult)) > count)
+
+
+async def test_fresh_names_reach_the_server_before_the_recording(setup):
+    c, pad, backend, events, replies, _ = setup
+    backend.answer = lambda nonce: f"VFX1 {nonce} {EXPORT}"
+    await record_once(pad, events)
+    [export] = backend.exports()
+    assert re.fullmatch(r"VF:export:[0-9a-f]{8}:", export)
+    [context] = replies["contexts"]
+    assert replies["contexts_at_voice"] == 1  # the server had the names for the recording
+    assert context["type"] == "context" and context["source"] == "live" and context["age_s"] == 0
+    assert context["channels"] == [{"n": 5, "name": "Рейдеры"}] and context["group"] == ["Арторн"]
+    # The copy worked, so Enter closes the addon's box; then the message is typed.
+    export_run = next(i for i, run in enumerate(backend.runs) if any(a.value == export for a in run))
+    assert [a.value for a in backend.runs[export_run + 1]] == ["enter"]
+    assert backend.pastes() == ["VF:guild::Всем привет"]
+    names = c.snapshot()["names"]
+    assert names.source == "live" and names.me == "Кирилл-Пламегор" and names.counts["guild_online"] == 1
+    assert of(events, Names)[-1] == names
+    await record_once(pad, events)  # a moment later: no second copy yet
+    assert len(backend.exports()) == 1
+
+
+async def test_old_addon_does_not_answer(setup):
+    c, pad, backend, events, replies, _ = setup
+    await record_once(pad, events)
+    assert len(backend.exports()) == 1 and replies["contexts"] == []
+    # Nothing was copied, so no Enter: it would open the game's chat box.
+    assert not any([a.value for a in run] == ["enter"] for run in backend.runs)
+    assert c.snapshot()["names"] == Names()
+
+
+async def test_names_from_the_saved_file_and_turning_them_off(setup):
+    c, pad, backend, events, replies, configure = setup
+    saved = backend.exe.parent / "WTF" / "Account" / "ACC" / "SavedVariables" / "VoiceForever.lua"
+    saved.parent.mkdir(parents=True)
+    saved.write_text(
+        'VoiceForeverDB = { ["chars"] = { ["Кирилл-Пламегор"] = { ["v"] = 1, ["at"] = 1762950000, '
+        '["channels"] = { { ["n"] = 5, ["name"] = "Рейдеры" } }, ["guild"] = {} } } }',
+        encoding="utf-8",
+    )
+    await until(lambda: replies["contexts"])
+    [context] = replies["contexts"]
+    assert context["source"] == "file" and context["channels"] == [{"n": 5, "name": "Рейдеры"}]
+    assert context["age_s"] > 0
+    await until(lambda: c.snapshot()["names"].source == "file")
+    await asyncio.to_thread(configure, game_context=False)
+    await until(lambda: len(replies["contexts"]) == 2)
+    assert replies["contexts"][-1] is None  # the server forgets them
+    assert c.snapshot()["names"] == Names()
+    await record_once(pad, events)
+    assert backend.exports() == []  # and nothing is copied from the game

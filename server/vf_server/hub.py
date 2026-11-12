@@ -12,6 +12,9 @@ A refused recording gets {"status": "denied", "reason": "limit" | "no_access" | 
 With an access service the server also sends the account summary it gives (plan, messages
 left today), right after connecting and whenever it changes:
   server -> agent  {"type": "account", ...}
+Names and channels from the game (see gamectx.py), sent again when they change:
+  agent -> server  {"type": "context", "v": 1, "source": "live" | "file", "age_s": 3, "channels": [...], ...}
+  agent -> server  {"type": "context_clear"}  (the player turned it off)
 The agent authenticates with "Authorization: Bearer <agent token>". A refused token gets
 HTTP 401 with {"error": "unknown" | "revoked", "link": "..."}; 503 if the access point is down.
 """
@@ -70,6 +73,8 @@ class VoiceUpload:
 
 # Turns a recording into the voice_result fields (status, text, ...). Set by main.
 type VoiceHandler = Callable[[int, VoiceUpload], Awaitable[dict[str, Any]]]
+# Takes the names and channels from the player's game (None: forget them). Set by main.
+type ContextHandler = Callable[[int, dict[str, Any] | None], None]
 
 MAX_HEADER_BYTES = 1024
 
@@ -105,6 +110,7 @@ class AgentHub:
         self.ack_timeout_s = ack_timeout_s
         self.max_voice_bytes = max_voice_bytes
         self.voice_handler: VoiceHandler | None = None
+        self.context_handler: ContextHandler | None = None
         # One recording at a time per player, in the order they were spoken.
         self._voice_locks: dict[int, asyncio.Lock] = {}
 
@@ -173,6 +179,12 @@ class AgentHub:
                             except ValueError:
                                 status = AckStatus.ERROR
                             fut.set_result(Ack(status, str(rest.get("detail", ""))))
+                    case {"type": "context" | "context_clear" as kind} if self.context_handler:
+                        # Handled before the next frame: a recording sent after it already uses it.
+                        try:
+                            self.context_handler(user_id, data if kind == "context" else None)
+                        except Exception:
+                            log.exception("bad names from the game of user %s", user_id)
         finally:
             for task in voice_tasks:
                 task.cancel()

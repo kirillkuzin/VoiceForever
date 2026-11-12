@@ -14,7 +14,8 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from .access import Access, Allow, Check, Outcome, Reason, Source, Usage
-from .chat import ChatMessage, split_message, validate
+from .chat import Channel, ChatMessage, split_message, validate
+from .gamectx import GameContext
 from .hub import Ack, AckStatus, AgentHub, VoiceUpload
 from .i18n import LANGUAGES, t
 from .router import Decision, LLMRouter, RouteContext, RouteResult, rule_route
@@ -22,6 +23,10 @@ from .store import Store
 from .stt import Transcriber, TranscriptionError
 
 MIN_VOICE_MS = 300  # shorter clips are accidental presses
+# Nicknames in the speech recognition hint: whisper models read at most 224 tokens of prompt
+# and keep its end, so the hint stays short and the likeliest names come first.
+STT_MAX_NAMES = 30
+STT_MAX_NAMES_CHARS = 300
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +89,35 @@ class VoiceService:
             rewrite_style=s.rewrite_style,
             known_names=list(dict.fromkeys([*self.global_names, *s.names()])),
             recent=self.store.recent(user_id),
+            game=self.store.game(user_id),
         )
+
+    def set_game_context(self, user_id: int, data: dict[str, Any] | None) -> None:
+        """Names and channels from the player's game, from the agent; None forgets them."""
+        if data is None:
+            self.store.set_game(user_id, None)
+            log.info("user %s: names from the game turned off", user_id)
+            return
+        try:
+            context = GameContext.parse(data)
+        except ValueError as e:
+            log.warning("user %s: unusable names from the game: %s", user_id, e)
+            return
+        self.store.set_game(user_id, context)
+        log.info("user %s: names from the game (%s): %s", user_id, context.source, context.counts())
+
+    def stt_names(self, user_id: int) -> list[str]:
+        """Nicknames for the speech recognition hint: the player's own (/names), then the game's."""
+        ctx = self.context(user_id)
+        game = ctx.game.names() if ctx.game is not None else []
+        channels = [c.name.split(" - ")[0] for c in ctx.game.channels] if ctx.game is not None else []
+        names, size = [], 0
+        for name in dict.fromkeys([*ctx.known_names, *(n.split("-")[0] for n in game), *channels]):
+            if len(names) >= STT_MAX_NAMES or size + len(name) + 2 > STT_MAX_NAMES_CHARS:
+                break
+            names.append(name)
+            size += len(name) + 2
+        return names
 
     def speech_language(self, user_id: int) -> str:
         """The language of the hints sent with the audio: the one speech recognition is
@@ -94,7 +127,7 @@ class VoiceService:
 
     async def transcribe(self, user_id: int, audio: bytes, filename: str) -> str:
         lang = self.speech_language(user_id)
-        names = self.context(user_id).known_names
+        names = self.stt_names(user_id)
         hint = t(lang, "stt.names", names=", ".join(names)) if names else ""
         return await self.transcriber.transcribe(audio, filename, extra_prompt=hint, lang=lang)
 
@@ -160,6 +193,14 @@ class VoiceService:
         message = validate(message.channel, message.target, message.text, default)
         if not (parts := split_message(message.text, self.max_message_bytes)):
             return Delivery(Ack(AckStatus.ERROR, "empty message"), message, [])
+        if message.channel is Channel.CHANNEL and not message.target.isdigit():
+            # The addon finds a channel by name; the plain chat box only takes its number.
+            info = self.hub.info(user_id)
+            if info is not None and info.mode == "chat":
+                game = self.store.game(user_id)
+                if (found := game.channel(message.target) if game else None) is None:
+                    return Delivery(Ack(AckStatus.ERROR, "a channel by name needs the addon"), message, [])
+                message = ChatMessage(message.channel, str(found.n), message.text)
         ack = await self.hub.send(user_id, message, parts, voice_id)
         if ack.ok:
             self.store.remember(user_id, message.channel, message.target, message.text)

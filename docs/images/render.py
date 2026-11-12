@@ -90,6 +90,8 @@ CONFIG = {
     "mic_device": "",
     "max_record_s": 30,
     "ptt_sounds": True,
+    "game_context": True,
+    "live_context": True,
 }
 
 AGENT_STRINGS = strings(AGENT_LOCALES, LANG)
@@ -100,6 +102,9 @@ PAD_BUTTONS = [
 ]
 
 PAD = {"connected": True, "name": "Xbox Wireless Controller", "playstation": False, "error": ""}
+# Names and channels from the game, as the server has them.
+NAMES = {"source": "live", "at": T - 95, "me": "Kirill-Flamegor",
+         "counts": {"channels": 4, "group": 4, "guild": 37, "guild_online": 12, "friends": 8, "recent": 5}}
 MICS = ["Headset Microphone (Xbox Wireless Headset)", "Microphone (Realtek High Definition Audio)"]
 
 
@@ -130,7 +135,7 @@ def agent_state(first_run: bool) -> dict:
         "system_lang": LANG,
         "strings": AGENT_STRINGS,
         "languages": [{"code": code, "name": name} for code, name in LANGUAGES.items()],
-        "version": "0.3.0",
+        "version": "0.4.0",
         "configured": not first_run,
         "first_run": first_run,
         "config": CONFIG,
@@ -146,6 +151,7 @@ def agent_state(first_run: bool) -> dict:
         "pad": PAD,
         "recording": {"state": "idle", "started_at": None, "max_s": 30},
         "bind_check": None,
+        "names": NAMES if not first_run else {"source": "", "at": None, "me": "", "counts": {}},
         "pad_buttons": PAD_BUTTONS,
     }
 

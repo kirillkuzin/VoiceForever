@@ -8,6 +8,7 @@ import contextlib
 import io
 import itertools
 import logging
+import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -61,8 +62,8 @@ LANGUAGE_NAMES: frozendict[str, str] = frozendict(
 )
 
 # The command menu, in this order; the descriptions are cmd.<command> in the locales.
-COMMANDS = ("start", "status", "panel", "channel", "confirm", "style", "names", "language",
-            "widgets", "help")
+COMMANDS = ("start", "status", "panel", "channel", "confirm", "style", "names", "channels",
+            "language", "widgets", "help")
 # Added when the access point sells a subscription; Telegram asks for /terms and /paysupport.
 PAYMENT_COMMANDS = ("buy", "terms", "paysupport")
 STARS = "XTR"
@@ -288,6 +289,17 @@ def build_router(
         service.store.update_ui(uid, widgets=on)
         await message.answer(t(lang, "bot.widgets_on" if on else "bot.widgets_off"))
 
+    def game_line(uid: int, lang: str) -> str:
+        """What the server knows from the player's game: how many channels and nicknames."""
+        if (game := service.store.game(uid)) is None:
+            return t(lang, "bot.game_none")
+        c = game.counts()
+        return t(
+            lang, "bot.game",
+            channels=c["channels"], guild=c["guild"], online=c["guild_online"], friends=c["friends"],
+            group=c["group"], min=max(0, int(time.time() - game.made_at) // 60),
+        )
+
     @router.message(Command("status"), is_player)
     async def status(message: Message, lang: str, uid: int) -> None:
         s = service.store.get(uid)
@@ -304,7 +316,16 @@ def build_router(
             style=s.rewrite_style or t(lang, "bot.off"),
             names=s.known_names or "—",
             language=language_line(uid, lang),
-        ))
+        ) + "\n" + game_line(uid, lang))
+
+    @router.message(Command("channels"), is_player)
+    async def channels(message: Message, lang: str, uid: int) -> None:
+        game = service.store.game(uid)
+        if game is None or not game.channels:
+            await message.answer(t(lang, "bot.channels_none"))
+            return
+        lines = "\n".join(f"{c.n}. {c.name}" for c in game.channels)
+        await message.answer(t(lang, "bot.channels", list=lines))
 
     @router.message(Command("channel"), is_player)
     async def set_channel(

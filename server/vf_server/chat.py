@@ -38,16 +38,19 @@ def channel_name(channel: Channel, lang: str = SOURCE) -> str:
 
 
 _NAME_RE = re.compile(r"^[^\s\d\W][^\s\W]{1,11}(-[\w']{2,30})?$")
+# A chat channel by name, as the game shows it: "Рейдеры", "Торговля - Город".
+_CHANNEL_NAME_RE = re.compile(r"^[^\s\d\W][\w' .\-]{0,47}$")
 
 
 @dataclass(frozen=True, slots=True)
 class ChatMessage:
     channel: Channel
-    target: str  # whisper recipient or channel number, "" otherwise
+    target: str  # whisper recipient, channel number or name, "" otherwise
     text: str
 
     def label(self, lang: str = SOURCE) -> str:
-        """Where the message goes, for people: "Guild", "Whisper → Arthorn", "Channel 2"."""
+        """Where the message goes, for people: "Guild", "Whisper → Arthorn", "Channel 2",
+        "Channel Raiders"."""
         match self.channel:
             case Channel.WHISPER if self.target:
                 return t(lang, "chan.whisper_to", name=self.target)
@@ -66,7 +69,7 @@ def validate(
     match ch:
         case Channel.WHISPER if not _NAME_RE.match(target):
             ch, target = Channel.REPLY, ""
-        case Channel.CHANNEL if not target.isdigit():
+        case Channel.CHANNEL if not (target.isdigit() or _CHANNEL_NAME_RE.match(target)):
             ch, target = default_channel, ""
         case Channel.WHISPER | Channel.CHANNEL:
             pass

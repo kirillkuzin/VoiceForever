@@ -30,6 +30,7 @@ from .client import (
     Game,
     InputBackend,
     MicLevel,
+    Names,
     PadState,
     RecState,
     Recording,
@@ -38,6 +39,7 @@ from .client import (
     VoiceResult,
 )
 from .config import AgentConfig
+from .context import GameContext, from_saved
 from .devices import Devices, Pad, Press
 from .i18n import t
 from .plan import GameState, Mode, SendCommand
@@ -56,6 +58,10 @@ BIND_WAIT_GAME_S = 600  # the player starts the game and logs in
 BIND_WAIT_ADDON_S = 120  # the player presses the button in the game, the UI reloads
 ADDON_NOT_SET_UP = ("", -1.0)  # _addon_synced when the addon has no push-to-talk button yet
 ADDON_REREAD_S = 10.0  # until then, how often to look whether it got one (/vf ptt in the game)
+SAVED_NAMES_EVERY_S = 5.0  # how often to look whether the game wrote the addon's file (/reload, logout)
+LIVE_NAMES_EVERY_S = 20.0  # the least time between two copies of fresh names from the game
+LIVE_NAMES_BACKOFF_S = (60.0, 600.0)  # pauses after copies that failed: first, longest
+LIVE_NAMES_WAIT_S = 2.0  # how long a recording waits for the names copied at its start
 # Recording statuses with a line of their own on the addon's badge in the game.
 BADGE_STATUSES = frozenset({
     "skip", "empty", "stt_error", "bad_audio", "too_long", "unsupported", "offline", "timeout", "error",
@@ -85,6 +91,8 @@ class Controller:
         self.pad = PadState(False)
         self.recording = Recording(RecState.IDLE)
         self.bind_check: BindCheck | None = None
+        self.names = Names()
+        self.context: GameContext | None = None  # names and channels from the game, for the server
         self.account: Account | None = None  # from the server's account service, if it has one
         self.devices: Devices | None = None
         self._agent: Agent | None = None
@@ -98,6 +106,12 @@ class Controller:
         self._sending = 0  # recordings sent and not answered yet
         self._addon_synced: tuple[str, float] | None = None  # (mode, max_s) the addon has
         self._addon_read_at = 0.0  # time.monotonic() of the last look at its saved file
+        self._exe: Path | None = None  # the game's exe, kept after it closes: logout writes the file
+        self._saved_checked_at = -SAVED_NAMES_EVERY_S  # time.monotonic() of the last look for names
+        self._saved_mtime: float | None = None  # of the saved file the names last came from
+        self._live_at = -LIVE_NAMES_EVERY_S  # time.monotonic() of the last copy from the game
+        self._live_pause = 0.0  # grows while copies fail (an addon without the export)
+        self._export: asyncio.Task[None] | None = None
         self._test_ids = itertools.count(1)
         self._lock = threading.Lock()  # guards the snapshot fields above against the window's reads
         self._loop = asyncio.new_event_loop()
@@ -162,6 +176,7 @@ class Controller:
                 "pad": self.pad,
                 "recording": self.recording,
                 "bind_check": self.bind_check,
+                "names": self.names,
                 "account": self.account,
             }
 
@@ -203,6 +218,8 @@ class Controller:
                     self.recording = event
                 case BindCheck():
                     self.bind_check = event
+                case Names():
+                    self.names = event
         if self.on_event is not None:
             try:
                 self.on_event(seq, event)
@@ -219,8 +236,9 @@ class Controller:
             await self._finish(self._ptt.abort())
         self._ptt.mode, self._ptt.max_s = config.ptt_mode, config.max_record_s
         backend = self.make_backend(config)
+        await self._configure_names(old)
         if self._agent is None:
-            self._agent = Agent(config, backend, self._emit)
+            self._agent = self._new_agent(config, backend)
             return False
         if (old.server_url, old.token, old.mode) == (config.server_url, config.token, config.mode):
             # Input settings apply to the next message; the connection stays as it is.
@@ -229,10 +247,15 @@ class Controller:
         # A new token is the usual fix for a rejected one, so try again right away.
         retry = self.running or self.status.state in (ConnState.AUTH_FAILED, ConnState.REPLACED)
         await self._disconnect()
-        self._agent = Agent(config, backend, self._emit)
+        self._agent = self._new_agent(config, backend)
         if retry:
             await self._connect()
         return retry
+
+    def _new_agent(self, config: AgentConfig, backend: InputBackend) -> Agent:
+        agent = Agent(config, backend, self._emit)
+        agent.context = self.context  # the server gets it after connecting
+        return agent
 
     async def _connect(self) -> None:
         if self._agent is None or self.running:
@@ -279,12 +302,84 @@ class Controller:
                     log.exception("game window check failed")
                 else:
                     if state is not self.game:
+                        if self.game is GameState.CLOSED:
+                            self._exe = None  # it may be another copy of the game this time
                         self._emit(Game(state))
                         if state is GameState.CLOSED:
                             self._addon_synced = None  # a new game session reads the file again
                     if state is GameState.ACTIVE:
                         await self._sync_addon()
+                    await self._check_saved_names(backend, state)
             await asyncio.sleep(GAME_POLL_S)
+
+    # ------------------------------------------------------------ names from the game
+    def _names_wanted(self) -> bool:
+        config = self.config
+        return config is not None and config.game_context and config.mode == Mode.ADDON
+
+    async def _configure_names(self, old: AgentConfig | None) -> None:
+        if not self._names_wanted():
+            if self.context is not None:
+                await self._use_names(None)
+            return
+        if old is None or not (old.game_context and old.mode == Mode.ADDON):
+            self._saved_mtime, self._saved_checked_at = None, -SAVED_NAMES_EVERY_S  # read the file again
+        if not self.config.live_context:
+            self._live_pause = 0.0
+
+    async def _use_names(self, context: GameContext | None) -> None:
+        """Keep these names unless older ones came in late; None forgets them, here and on the server."""
+        if context is not None and self.context is not None and context.at < self.context.at:
+            return
+        self.context = context
+        self._emit(Names.of(context))
+        if self._agent is not None:
+            await self._agent.send_context(context)
+
+    async def _check_saved_names(self, backend: InputBackend | None, state: GameState) -> None:
+        """Names from the addon's saved file, when the game wrote it again (/reload, logout)."""
+        now = time.monotonic()
+        if not self._names_wanted() or now - self._saved_checked_at < SAVED_NAMES_EVERY_S:
+            return
+        self._saved_checked_at = now
+        try:
+            if self._exe is None and state is not GameState.CLOSED:
+                self._exe = await asyncio.to_thread(getattr(backend, "game_exe", lambda: None))
+            mtime, context = await asyncio.to_thread(saved_names, self._exe, self._saved_mtime)
+        except Exception:
+            log.exception("reading names from the addon's file failed")
+            return
+        self._saved_mtime = mtime
+        if context is not None:
+            await self._use_names(context)
+
+    def _start_live_names(self) -> None:
+        """When a recording starts: copy fresh names from the game while the player speaks."""
+        config, agent = self.config, self._agent
+        if agent is None or not self._names_wanted() or not config.live_context:
+            return
+        if self._export is not None and not self._export.done():
+            return
+        now = time.monotonic()
+        if now - self._live_at < max(LIVE_NAMES_EVERY_S, self._live_pause) or not self._game_focused():
+            return
+        self._live_at = now
+        self._export = asyncio.create_task(self._live_names(agent))
+
+    async def _live_names(self, agent: Agent) -> None:
+        context = await agent.export_context()
+        if context is None:
+            low, high = LIVE_NAMES_BACKOFF_S
+            self._live_pause = min(max(self._live_pause * 2, low), high)
+            return
+        self._live_pause = 0.0
+        await self._use_names(context)
+
+    async def _live_names_done(self) -> None:
+        """Let the names copied at the start of a recording reach the server before the recording."""
+        if (task := self._export) is not None and not task.done():
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(asyncio.shield(task), LIVE_NAMES_WAIT_S)
 
     # ------------------------------------------------------------ push-to-talk
     def _game_focused(self) -> bool:
@@ -347,6 +442,7 @@ class Controller:
                 if sounds:
                     devices.beep("start")
                 self._emit(Recording(RecState.RECORDING, time.time(), config.max_record_s))
+                self._start_live_names()
                 if self._ticker is None or self._ticker.done():
                     self._ticker = asyncio.create_task(self._tick())
             case Cmd.CANCEL:
@@ -375,6 +471,7 @@ class Controller:
                 result = VoiceResult("", "offline", detail=t("net.offline"))
                 self._emit(result)
             else:
+                await self._live_names_done()
                 result = await agent.send_voice(pcm)
         finally:
             self._sending -= 1
@@ -540,6 +637,8 @@ class Controller:
         await self._finish(self._ptt.abort())
         if self._ticker is not None:
             self._ticker.cancel()
+        if self._export is not None:
+            self._export.cancel()
         await self._disconnect()
         if self._poller is not None:
             self._poller.cancel()
@@ -557,6 +656,23 @@ def read_addon_db_from(exe: Path | None) -> dict[str, Any]:
         except (OSError, savedvars.LuaError) as e:
             log.warning("cannot read %s: %s", path, e)
     return {}
+
+
+def saved_names(exe: Path | None, seen_mtime: float | None) -> tuple[float | None, GameContext | None]:
+    """The newest names in the addon's saved files, if they changed since `seen_mtime`.
+
+    Returns the time the newest file was written, and its names if they are new.
+    """
+    if exe is None:
+        return seen_mtime, None
+    try:
+        files = savedvars.addon_files(exe)
+        mtime = files[0].stat().st_mtime if files else None
+    except OSError:
+        return seen_mtime, None
+    if mtime is None or mtime == seen_mtime:
+        return seen_mtime, None
+    return mtime, from_saved(read_addon_db_from(exe))
 
 
 def read_addon_db(backend: InputBackend | None) -> dict[str, Any]:

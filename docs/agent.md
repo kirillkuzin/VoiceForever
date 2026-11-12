@@ -45,6 +45,12 @@ The server recognises the speech the same way as Telegram voice messages, and Cl
 
 The agent reads the gamepad and the microphone through [SDL3](https://libsdl.org) (zlib license); `SDL3.dll` is already inside the exe. Gamepad voice works in the windowed app only; `--headless` does not enable it.
 
+## Names from the game
+
+With the addon, the agent sends the server your chat channels and the nicknames of your group, guild, friends and recent whispers (see [Names and channels](addon.md#names-and-channels)). Speech recognition then spells nicknames as the game does, Claude picks whisper targets from them, and you can name a channel ("в канал Рейдеры, …"). The status tab shows what the server has and from when.
+
+The agent reads the addon's saved file whenever the game writes it (`/reload`, logout), and when a recording starts it copies fresh names from the addon while you speak (at most every 20 s; it types a line into the addon's field and presses Ctrl+C, which takes a fraction of a second). Settings → Names from the game turns this off (`game_context`, `live_context`); the server then forgets the names. The server keeps them in memory only and never logs them.
+
 ## Language
 
 The window, the tray and the messages speak English, Russian, German, Spanish and French. The agent starts in the Windows display language (English if it is none of these) and you can switch it with the globe button in the title bar or in Settings → App. In `config.toml` it is `language = ""` (follow Windows) or one of `en`, `ru`, `de`, `es`, `fr`.

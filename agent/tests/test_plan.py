@@ -1,6 +1,15 @@
 import pytest
 
-from vf_agent.plan import Action, Kind, Mode, SendCommand, addon_line, build_actions, chat_line
+from vf_agent.plan import (
+    Action,
+    Kind,
+    Mode,
+    SendCommand,
+    addon_line,
+    build_actions,
+    chat_line,
+    export_actions,
+)
 
 
 def cmd(channel="group", target="", parts=("Привет",)):
@@ -83,3 +92,25 @@ def test_parse_combo_rejects(combo):
 
     with pytest.raises(ValueError):
         parse_combo(combo)
+
+
+def test_export_actions_copy_the_addon_box():
+    assert export_actions("ctrl+shift+f12", "ab12cd34") == [
+        Action(Kind.KEY, "ctrl+shift+f12"),
+        Action(Kind.SLEEP, 40),
+        Action(Kind.PASTE, "VF:export:ab12cd34:"),
+        Action(Kind.KEY, "enter"),
+        Action(Kind.SLEEP, 40),
+        Action(Kind.COPY, "VFX1 ab12cd34 "),
+    ]
+
+
+def test_server_cannot_ask_for_an_export():
+    with pytest.raises(ValueError):
+        SendCommand.from_json({"id": "1", "channel": "export", "parts": ["x"]})
+
+
+def test_channel_by_name_needs_the_addon():
+    assert addon_line("channel", "Рейдеры", "сбор") == "VF:channel:Рейдеры:сбор"
+    with pytest.raises(ValueError):
+        chat_line("channel", "Рейдеры", "сбор")  # the chat box would take it for /say

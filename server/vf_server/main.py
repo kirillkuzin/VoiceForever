@@ -68,6 +68,7 @@ async def run(settings: Settings) -> None:
         rate_per_min=settings.rate_per_min,
     )
     hub.voice_handler = service.handle_agent_voice
+    hub.context_handler = service.set_game_context
 
     runner = web.AppRunner(hub.app())
     await runner.setup()

@@ -18,10 +18,12 @@ import anthropic
 
 from .access import TokenUsage
 from .chat import Channel, ChatMessage, validate
+from .gamectx import GameContext
 
 log = logging.getLogger(__name__)
 
 RECENT_WINDOW_S = 300  # a channel used within 5 minutes is the default for the next phrase
+MAX_LLM_NAMES = 150  # nicknames from the game given to Claude, the likeliest first
 
 
 class Decision(StrEnum):
@@ -43,6 +45,7 @@ class RouteContext:
     rewrite_style: str = ""  # empty = punctuation fixes only
     known_names: list[str] = field(default_factory=list)
     recent: list[SentRecord] = field(default_factory=list)
+    game: GameContext | None = None  # names and channels from the player's game
 
     def last_channel(self, now: float | None = None) -> tuple[Channel, str] | None:
         now = time.time() if now is None else now
@@ -84,6 +87,11 @@ _WHISPER_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _THAT_RE = re.compile(r"^(?:скажи\s+|напиши\s+)?(?:что|чтобы)\s+", re.IGNORECASE)
+_CHANNEL_RE = re.compile(
+    r"^(?:в\s+)?(?:канал|channel)\s+(?:номер\s+)?([^\s,.:!?]+)[\s,.:!?—-]*(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+_ANSWER_RE = re.compile(r"^(?:ответь|answer)\s+([^\s,.:!?]+)[\s,.:!?—-]*(.*)$", re.IGNORECASE | re.DOTALL)
 
 
 def _capitalize(text: str) -> str:
@@ -94,11 +102,33 @@ def _body(text: str) -> str:
     return _capitalize(_THAT_RE.sub("", text.strip()))
 
 
+def snap(msg: ChatMessage, ctx: RouteContext) -> ChatMessage:
+    """Spell a whisper target and a channel name the way the game does, when the game knows them."""
+    game = ctx.game
+    if game is None or not msg.target:
+        return msg
+    match msg.channel:
+        case Channel.WHISPER if name := game.match_name(msg.target):
+            return replace(msg, target=name)
+        case Channel.CHANNEL if not msg.target.isdigit() and (ch := game.channel(msg.target)):
+            return replace(msg, target=ch.name)
+    return msg
+
+
 def rule_route(transcript: str, ctx: RouteContext, now: float | None = None) -> RouteResult:
     text = transcript.strip()
 
     if m := _WHISPER_RE.match(text):
         msg = validate(Channel.WHISPER, m[1].capitalize(), _body(m[2]), ctx.default_channel)
+        return RouteResult(Decision.SEND, snap(msg, ctx), "rules")
+
+    if m := _CHANNEL_RE.match(text):
+        msg = validate(Channel.CHANNEL, m[1], _body(m[2]), ctx.default_channel)
+        return RouteResult(Decision.SEND, snap(msg, ctx), "rules")
+
+    # "ответь Арторну, ..." whispers a nickname from the game; "ответь ему" goes on to reply.
+    if ctx.game is not None and (m := _ANSWER_RE.match(text)) and (name := ctx.game.match_name(m[1], now)):
+        msg = validate(Channel.WHISPER, name, _body(m[2]), ctx.default_channel)
         return RouteResult(Decision.SEND, msg, "rules")
 
     for pattern, channel, target in _PREFIXES:
@@ -121,17 +151,22 @@ Decide:
 1. channel - where the message goes:
    say, yell, emote, group (party/raid/instance chat - the game addon picks the right one), \
 party, raid, raid_warning, instance, guild, officer, whisper (needs target = character name), \
-reply (answer the last person who whispered the player), channel (numbered chat channel; \
-target = its number, 1 = General, 2 = Trade).
+reply (answer the last person who whispered the player), channel (a chat channel: \
+target = its name exactly as in game.channels, or its number when the player says a number; \
+without game.channels 1 = General, 2 = Trade).
    - An explicit routing phrase wins: "в пати", "в рейд", "в гильдию", "офицерам", \
-"крикни", "шепни Арторн", "ответь ему", "в трейд".
-   - "ответь", "ответь ему/ей" without a name means reply.
+"крикни", "шепни Арторн", "ответь ему", "в трейд", "в канал Рейдеры", "в рейдеры" (a name \
+from game.channels).
+   - "ответь", "ответь ему/ей" without a name means reply; "ответь Арторну" means whisper \
+to that name.
    - Without a routing phrase, continue the conversation the player is in: use the channel \
 of recent messages if the last one was under 5 minutes ago and the phrase fits it; \
 otherwise use default_channel.
    - Prefer "group" over "party"/"raid"/"instance" unless the player names one of those.
-2. target - character name for whisper (match known_names when the spoken name sounds \
-like one of them, keep the game spelling), channel number for channel, otherwise "".
+2. target - character name for whisper, channel name or number for channel, otherwise "".
+   - A spoken name may be misrecognised or declined ("Арторну"): when it sounds like a name \
+in known_names or game.names, use that name exactly, realm part included. game.names lists \
+the likeliest first; game.recent_whispers is who the player is talking to.
 3. text - what to post:
    - Remove the routing words ("скажи в пати", "шепни Арторну", "напиши в гильдию").
    - Turn reported speech into the message itself: "скажи в пати, что я отойду на пять \
@@ -210,6 +245,16 @@ class LLMRouter:
                 for r in ctx.recent[-8:]
             ],
         }
+        if (game := ctx.game) is not None:
+            payload["game"] = {
+                "channels": [{"number": c.n, "name": c.name} for c in game.channels],
+                "group": list(game.group),
+                "recent_whispers": [
+                    {"name": r.name, "from_player": r.dir == "out", "minutes_ago": ago // 60}
+                    for r, ago in game.recent_whispers(now)
+                ],
+                "names": game.names(now)[:MAX_LLM_NAMES],
+            }
         return json.dumps(payload, ensure_ascii=False)
 
     async def route(self, transcript: str, ctx: RouteContext) -> RouteResult:
@@ -231,7 +276,7 @@ class LLMRouter:
             log.warning("LLM output unusable (%s), using rules", e)
             return fallback("llm_format", usage=e.usage)
 
-        msg = validate(data["channel"], data["target"], data["text"], ctx.default_channel)
+        msg = snap(validate(data["channel"], data["target"], data["text"], ctx.default_channel), ctx)
         if data["action"] == Decision.SKIP or not msg.text:
             return RouteResult(Decision.SKIP, msg, "llm", usage=usage)
         return RouteResult(Decision.SEND, msg, "llm", usage=usage)
