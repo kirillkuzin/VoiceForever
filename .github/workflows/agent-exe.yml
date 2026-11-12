@@ -136,7 +136,10 @@ jobs:
           name: VoiceForeverAgent
           path: release
       - name: Package the addon
-        run: (cd addon && zip -r "../release/VoiceForever-addon-${GITHUB_REF_NAME}.zip" VoiceForever)
+        # The license text travels inside the addon folder.
+        run: |
+          cp LICENSE addon/VoiceForever/LICENSE
+          (cd addon && zip -r "../release/VoiceForever-addon-${GITHUB_REF_NAME}.zip" VoiceForever)
       - name: Checksums
         run: (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Publish the release
