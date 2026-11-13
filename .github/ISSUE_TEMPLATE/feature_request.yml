@@ -1,0 +1,15 @@
+name: Feature request
+description: An idea for VoiceForever
+labels: [enhancement]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What you want to do
+      description: The situation in the game and what VoiceForever should do in it.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How it could work

@@ -1,5 +1,10 @@
 # VoiceForever
 
+[![Release](https://img.shields.io/github/v/release/kirillkuzin/VoiceForever)](https://github.com/kirillkuzin/VoiceForever/releases/latest)
+[![Server image](https://github.com/kirillkuzin/VoiceForever/actions/workflows/server-image.yml/badge.svg?branch=master)](https://github.com/kirillkuzin/VoiceForever/actions/workflows/server-image.yml)
+[![Agent exe](https://github.com/kirillkuzin/VoiceForever/actions/workflows/agent-exe.yml/badge.svg?branch=master)](https://github.com/kirillkuzin/VoiceForever/actions/workflows/agent-exe.yml)
+[![License: AGPL-3.0](https://img.shields.io/github/license/kirillkuzin/VoiceForever)](LICENSE)
+
 **Speak, and your message appears in the right World of Warcraft: Forever chat channel.**
 
 Press a button on your gamepad, say what you want to write, and VoiceForever types it into the game: to your party, guild or raid, or as a whisper, with the punctuation fixed. No keyboard, no chat window, no picking the channel.
@@ -7,7 +12,7 @@ Press a button on your gamepad, say what you want to write, and VoiceForever typ
 **[Get VoiceForever →][website]**
 
 <p align="center">
-  <img src="docs/images/agent-status.png" width="360" alt="The VoiceForever app: connected, the game window is active, the last messages went to the party, a whisper and the guild">
+  <img src="docs/images/agent-status.png" width="360" alt="The VoiceForever app: connected, the plan and AI messages left today, the game window is active, the last messages went to the party and a whisper">
   &nbsp;
   <img src="docs/images/telegram-card-ask.png" width="255" alt="A message card in Telegram: a whisper waiting to be sent, with channel and name choices">
 </p>
@@ -34,7 +39,7 @@ WoW Forever plays great on a gamepad, right up until someone asks you something 
 ## What you get
 
 - **A Windows app** that sits in the tray while you play. It shows whether it is connected, sees your gamepad even when the game is in the background, and lists your last messages with a mark for each one that reached the game. Setup takes four steps: server, mode, voice and a check in the game.
-- **An in-game addon.** The chat window never opens: the addon picks party, raid or instance chat by itself, replies to the last whisper and shows a recording badge.
+- **An in-game addon.** The chat window never opens: the addon picks party, raid or instance chat by itself, replies to the last whisper and shows a recording badge. It also passes on your chat channels and the nicknames of your group, guild and friends, so names come out spelled as in the game and you can write to a channel by its name.
 - **A Telegram bot** for voice messages from your phone. Every message gets a card with its channel and delivery status, and a pinned panel holds your default channel, confirmation, message style and language.
 
 The app, the bot and the addon speak English, Russian, German, Spanish and French, and start in the language of your Windows, Telegram app and game client.
@@ -58,6 +63,10 @@ You can also run the whole thing on your own server, with your own keys for Tele
 - The app types only when the WoW window is active, and only what you said. It does not read or change game memory and automates nothing in gameplay.
 - A voice message cannot run a game command: VoiceForever strips a leading `/` or `.` and the `|` character from every message.
 - Blizzard's rules forbid automating gameplay. Typing your own words is close to Windows voice typing, but Blizzard has not officially approved tools like this. Use it at your own risk.
+
+## Contributing
+
+Bug reports, ideas and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -6,6 +6,8 @@ Send the bot a voice message and it types it into the game chat through the Wind
 
 | Command | What it does |
 |---|---|
+| `/start` | the setup checklist |
+| `/help` | the list of commands |
 | `/status` | whether the Windows app is connected, and your current settings |
 | `/channel group\|guild\|say\|raid` | the default channel, used when the phrase names none (channel names in any of the bot's languages work too) |
 | `/confirm on\|off` | show the message with buttons before sending it |

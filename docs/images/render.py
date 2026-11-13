@@ -14,6 +14,7 @@ locales/<lang>.json tables the app and the bot use; only the sample messages bel
 
 import json
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +27,8 @@ AGENT_PAGE = ROOT / "agent" / "vf_agent" / "ui" / "index.html"
 AGENT_LOCALES = ROOT / "agent" / "vf_agent" / "ui" / "locales"
 WIDGETS = ROOT / "server" / "vf_server" / "html"
 SERVER_LOCALES = ROOT / "server" / "vf_server" / "locales"
+# The version the window, the panel and the setup checklist show: the agent's own.
+VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "agent" / "vf_agent" / "__init__.py").read_text()).group(1)
 
 SOURCE = "en"
 LANGUAGES = {"en": "English", "ru": "Русский", "de": "Deutsch", "es": "Español", "fr": "Français"}
@@ -70,7 +73,7 @@ SAMPLE = SAMPLES.get(LANG, SAMPLES[SOURCE])
 # --------------------------------------------------------------------------- the agent
 
 CONFIG = {
-    "server_url": "wss://vf.example.com/ws",
+    "server_url": "wss://voiceforever.crazybrain.space/ws",  # config.py OFFICIAL_URL
     "token": "k3Jx9wQ2-example-agent-token",
     "mode": "addon",
     "addon_hotkey": "ctrl+shift+f12",
@@ -105,6 +108,9 @@ PAD = {"connected": True, "name": "Xbox Wireless Controller", "playstation": Fal
 # Names and channels from the game, as the server has them.
 NAMES = {"source": "live", "at": T - 95, "me": "Kirill-Flamegor",
          "counts": {"channels": 4, "group": 4, "guild": 37, "guild_online": 12, "friends": 8, "recent": 5}}
+# The plan box on the status tab, as a server with accounts sends it (client.Account).
+ACCOUNT = {"plan": "Full access", "ai_left": 87, "ai_limit": 100, "until": T + 24 * 86400,
+           "link": "https://voiceforever.crazybrain.space/account"}
 MICS = ["Headset Microphone (Xbox Wireless Headset)", "Microphone (Realtek High Definition Audio)"]
 
 
@@ -135,7 +141,7 @@ def agent_state(first_run: bool) -> dict:
         "system_lang": LANG,
         "strings": AGENT_STRINGS,
         "languages": [{"code": code, "name": name} for code, name in LANGUAGES.items()],
-        "version": "1.0.0",
+        "version": VERSION,
         "configured": not first_run,
         "first_run": first_run,
         "config": CONFIG,
@@ -152,6 +158,7 @@ def agent_state(first_run: bool) -> dict:
         "recording": {"state": "idle", "started_at": None, "max_s": 30},
         "bind_check": None,
         "names": NAMES if not first_run else {"source": "", "at": None, "me": "", "counts": {}},
+        "account": None if first_run else ACCOUNT,
         "pad_buttons": PAD_BUTTONS,
     }
 
@@ -232,10 +239,10 @@ CARD_ASK = {
     "o": SAMPLE["whisper"][0], "n": SAMPLE["names"], "a": 0, "e": "",
 }
 PANEL = {
-    "on": 1, "v": "0.3.0", "md": "addon", "since": T - 3723, "c": "group", "cf": 0,
+    "on": 1, "v": VERSION, "md": "addon", "since": T - 3723, "c": "group", "cf": 0,
     "st": "off", "cs": "", "tr": 1, "n": ", ".join(SAMPLE["names"][:2]), "lg": LANG,
 }
-SETUP = {"on": 1, "v": "0.3.0", "md": "addon", "t": "ok", "e": "", "vc": "", "dl": ""}
+SETUP = {"on": 1, "v": VERSION, "md": "addon", "t": "ok", "e": "", "vc": "", "dl": ""}
 
 
 # widgets.py WIDGET_STRINGS: which strings each widget gets.
