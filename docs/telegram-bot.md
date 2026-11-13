@@ -11,7 +11,7 @@ Send the bot a voice message and it types it into the game chat through the Wind
 | `/status` | whether the Windows app is connected, and your current settings |
 | `/channel group\|guild\|say\|raid` | the default channel, used when the phrase names none (channel names in any of the bot's languages work too) |
 | `/confirm on\|off` | show the message with buttons before sending it |
-| `/style like an orc shaman` | rewrite messages in a style (or "translate to English"); `/style off` turns it off |
+| `/style like an orc shaman` | rewrite messages in a style (or "translate to English"); `/style off` turns it off, `/style` alone shows the current style |
 | `/names Arthorn, Liana` | character names you mention often (helps recognition) |
 | `/channels` | the chat channels the Windows app sent from the game; say "channel Raiders, …" to write to one |
 | `/panel` | pin the control panel: app connected or not, channel, confirmation, style, language |
@@ -19,6 +19,8 @@ Send the bot a voice message and it types it into the game chat through the Wind
 | `/language` (or `/lang`) | the bot's language: English, Russian, German, Spanish or French |
 
 With an [access service](access-api.md) the bot also has `/buy` (a subscription for Telegram Stars, renewed every 30 days), `/terms` and `/paysupport`.
+
+The channel can be named at the start, at the end or changed mid-phrase ("I'm going to the boss, send it to the party… no, better to the guild"): Claude takes the last choice and leaves those words out of the message.
 
 Without a channel in the phrase, Claude continues the conversation in the channel you used in the last 5 minutes, otherwise it takes the default channel.
 

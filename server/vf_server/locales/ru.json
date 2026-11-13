@@ -16,6 +16,7 @@
   "bot.style_disabled": "Переписывание сообщений выключено на этом сервере.",
   "bot.style_set": "Стиль: {style}",
   "bot.style_off": "Стиль выключен, правлю только пунктуацию.",
+  "bot.style_usage": "/style <как писать> — включить, /style off — выключить",
   "bot.names_set": "Ники: {names}",
   "bot.game": "Из игры: каналы {channels}, гильдия {guild} (в сети {online}), друзья {friends}, группа {group}. Обновлено {min} мин назад.",
   "bot.game_none": "Из игры: пока ничего. Каналы и ники приходят от аддона VoiceForever через агента.",

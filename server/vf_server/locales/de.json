@@ -16,6 +16,7 @@
   "bot.style_disabled": "Das Umschreiben von Nachrichten ist auf diesem Server ausgeschaltet.",
   "bot.style_set": "Stil: {style}",
   "bot.style_off": "Stil ist aus, ich korrigiere nur die Zeichensetzung.",
+  "bot.style_usage": "/style <wie schreiben> — einschalten, /style off — ausschalten",
   "bot.names_set": "Namen: {names}",
   "bot.game": "Aus dem Spiel: Kanäle {channels}, Gilde {guild} ({online} online), Freunde {friends}, Gruppe {group}. Aktualisiert vor {min} Min.",
   "bot.game_none": "Aus dem Spiel: noch nichts. Kanäle und Namen kommen vom VoiceForever-Addon über den Agenten.",

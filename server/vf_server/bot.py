@@ -355,7 +355,12 @@ def build_router(
             await message.answer(t(lang, "bot.style_disabled"))
             return
         arg = (command.args or "").strip()
-        style = "" if not arg or arg.lower() in OFF_WORDS else arg[:300]
+        if not arg:  # a bare /style shows the style and changes nothing
+            now = service.store.get(uid).rewrite_style
+            shown = t(lang, "bot.style_set", style=now) if now else t(lang, "bot.style_off")
+            await message.answer(shown + "\n" + t(lang, "bot.style_usage"))
+            return
+        style = "" if arg.lower() in OFF_WORDS else arg[:300]
         service.store.update(uid, rewrite_style=style)
         if style and style not in STYLE_PRESETS.values():
             service.store.update_ui(uid, custom_style=style)

@@ -16,6 +16,7 @@
   "bot.style_disabled": "Rewriting messages is turned off on this server.",
   "bot.style_set": "Style: {style}",
   "bot.style_off": "Style is off, I only fix punctuation.",
+  "bot.style_usage": "/style <how to write> — turn it on, /style off — turn it off",
   "bot.names_set": "Nicknames: {names}",
   "bot.game": "From the game: channels {channels}, guild {guild} ({online} online), friends {friends}, group {group}. Updated {min} min ago.",
   "bot.game_none": "From the game: nothing yet. Channels and nicknames come from the VoiceForever addon through the agent.",
