@@ -16,6 +16,7 @@
   "bot.style_disabled": "La reescritura de mensajes está desactivada en este servidor.",
   "bot.style_set": "Estilo: {style}",
   "bot.style_off": "Estilo desactivado, solo corrijo la puntuación.",
+  "bot.style_usage": "/style <cómo escribir> — activarlo, /style off — desactivarlo",
   "bot.names_set": "Nombres: {names}",
   "bot.game": "Del juego: canales {channels}, hermandad {guild} ({online} en línea), amigos {friends}, grupo {group}. Actualizado hace {min} min.",
   "bot.game_none": "Del juego: nada todavía. Los canales y nombres llegan del addon VoiceForever a través del agente.",

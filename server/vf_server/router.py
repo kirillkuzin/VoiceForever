@@ -156,7 +156,11 @@ target = its name exactly as in game.channels, or its number when the player say
 without game.channels 1 = General, 2 = Trade).
    - An explicit routing phrase wins: "в пати", "в рейд", "в гильдию", "офицерам", \
 "крикни", "шепни Арторн", "ответь ему", "в трейд", "в канал Рейдеры", "в рейдеры" (a name \
-from game.channels).
+from game.channels), "отправь это в групповой чат", "в обычный чат".
+   - A routing phrase can stand anywhere: before the message, after it ("иду на босса, \
+отправь в пати") or as a change of mind ("в пати... нет, лучше в гильдию", "а еще лучше \
+в обычный сказать"). After a change of mind the last choice wins.
+   - "в обычный чат", "в обычный", "вслух" mean say; "в групповой чат" means group.
    - "ответь", "ответь ему/ей" without a name means reply; "ответь Арторну" means whisper \
 to that name.
    - Without a routing phrase, continue the conversation the player is in: use the channel \
@@ -168,16 +172,25 @@ otherwise use default_channel.
 in known_names or game.names, use that name exactly, realm part included. game.names lists \
 the likeliest first; game.recent_whispers is who the player is talking to.
 3. text - what to post:
-   - Remove the routing words ("скажи в пати", "шепни Арторну", "напиши в гильдию").
+   - The text is only what the other players should read. Remove every routing phrase, \
+change of mind and word addressed to you, wherever it stands ("скажи в пати", "шепни \
+Арторну", "напиши в гильдию", "отправь это в групповой чат", "а еще лучше нет, в обычный"). \
+Never retell them in the message.
    - Turn reported speech into the message itself: "скажи в пати, что я отойду на пять \
 минут" -> "Отойду на 5 минут".
+   - "проверка, иду на босса. Отправь это в пати. А нет, лучше в гильдию" -> channel guild, \
+text "Проверка, иду на босса."
    - Fix punctuation, capitalisation and obvious recognition errors; write numbers as digits; \
 keep the player's wording, slang and language. Do not add content, greetings or emoji.
-   - If rewrite_style is set, rewrite the text in that style (it may ask for a translation \
-or a role-play voice) while keeping the meaning.
+   - Without rewrite_style, change nothing else.
+   - If rewrite_style is set, rewrite the message in that style (it may ask for a translation \
+or a role-play voice) after the routing words are gone. Keep the meaning and do not make it \
+longer than needed; do not add greetings, addresses, apologies, explanations or anything the \
+player did not say.
    - Never start the text with "/" or ".", never include "|" or line breaks.
 4. action - "skip" only when the phrase is clearly not meant for chat (noise, a cough, \
-"отмена", "не отправляй", talking to someone in the room); otherwise "send".
+"отмена", "не отправляй", talking to someone in the room); otherwise "send". A change of \
+channel ("нет, лучше в гильдию") is not a cancel.
 """
 
 ROUTE_SCHEMA: frozendict[str, Any] = frozendict({

@@ -16,6 +16,7 @@
   "bot.style_disabled": "La réécriture des messages est désactivée sur ce serveur.",
   "bot.style_set": "Style : {style}",
   "bot.style_off": "Style désactivé, je corrige seulement la ponctuation.",
+  "bot.style_usage": "/style <comment écrire> — l’activer, /style off — le désactiver",
   "bot.names_set": "Pseudos : {names}",
   "bot.game": "Du jeu : canaux {channels}, guilde {guild} ({online} en ligne), amis {friends}, groupe {group}. Mis à jour il y a {min} min.",
   "bot.game_none": "Du jeu : rien pour l'instant. Les canaux et les pseudos viennent de l'addon VoiceForever via l'agent.",

@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from aiogram import Bot, Dispatcher
@@ -283,6 +284,21 @@ async def test_replies_follow_telegram_then_the_language_command(bot_env):
     assert reply["text"] == "Sprache des Bots: Deutsch."
     reply = await send("/confirm ja")
     assert reply["text"] == "Vor dem Senden fragen: an" and service.store.get(USER).confirm
+
+
+async def test_bare_style_shows_the_style_and_changes_nothing(bot_env):
+    service, _, send, _, _ = bot_env
+    service.router = SimpleNamespace(allow_transform=True)
+    usage = "/style <как писать> — включить, /style off — выключить"
+    reply = await send("/style", code="ru")
+    assert reply["text"] == "Стиль выключен, правлю только пунктуацию.\n" + usage
+    reply = await send("/style как орк", code="ru")
+    assert reply["text"] == "Стиль: как орк"
+    reply = await send("/style", code="ru")
+    assert reply["text"] == "Стиль: как орк\n" + usage
+    assert service.store.get(USER).rewrite_style == "как орк"
+    await send("/style off", code="ru")
+    assert service.store.get(USER).rewrite_style == ""
 
 
 async def test_command_menu_in_every_language():
