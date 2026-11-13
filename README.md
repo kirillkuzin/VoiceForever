@@ -1,3 +1,5 @@
+<img src="docs/images/logo.png" align="right" width="128" alt="VoiceForever logo: a gold shield with a V">
+
 # VoiceForever
 
 [![Release](https://img.shields.io/github/v/release/kirillkuzin/VoiceForever)](https://github.com/kirillkuzin/VoiceForever/releases/latest)
