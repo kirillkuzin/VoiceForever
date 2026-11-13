@@ -9,7 +9,7 @@ ghcr.io/kirillkuzin/voiceforever-server
 | Tag | What it is |
 |---|---|
 | `latest` | the latest version from the `master` branch |
-| `0.2.0`, `0.2` | releases, from `v*` tags |
+| `1.0.0`, `1.0` | releases, from `v*` tags |
 | `sha-<commit>` | a specific commit |
 
 GitHub Actions builds the image after the tests pass ([server-image.yml](../.github/workflows/server-image.yml)), for `linux/amd64` only.
@@ -32,22 +32,7 @@ curl -fsSLO https://raw.githubusercontent.com/kirillkuzin/VoiceForever/master/do
 curl -fsSL -o .env https://raw.githubusercontent.com/kirillkuzin/VoiceForever/master/.env.example
 ```
 
-While the repository is private, `curl` gets a 404. In that case `git clone` it (GitHub will ask you to sign in) and work inside the repository folder.
-
-## 2. Access to the image while it is private
-
-The image of a private repository is private too, so Docker has to sign in to GitHub:
-
-1. GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token, with the `read:packages` scope.
-2. On the VPS:
-
-   ```
-   echo <token> | docker login ghcr.io -u <GitHub login> --password-stdin
-   ```
-
-Once the repository is public, make the image public as well: the package page on GitHub → Package settings → Change visibility → Public. After that no sign-in is needed.
-
-## 3. Configure `.env`
+## 2. Configure `.env`
 
 Required variables:
 
@@ -73,7 +58,7 @@ Inside the container `127.0.0.1` is the container itself, so the Whisper address
 
 Leave `VF_STT_API_KEY` empty and take `VF_STT_MODEL` from `curl http://<address>/v1/models`. Whisper needs an OpenAI-compatible `POST /v1/audio/transcriptions` (speaches, faster-whisper-server, LocalAI, vLLM).
 
-## 4. Start
+## 3. Start
 
 ```
 docker compose pull
@@ -89,7 +74,7 @@ Check that it works:
 
 After editing `.env`, restart: `docker compose up -d --force-recreate`.
 
-## 5. Connect the Windows app
+## 4. Connect the Windows app
 
 Port 8765 is open only on the server's `127.0.0.1`. Do not expose it to the internet.
 
@@ -137,7 +122,7 @@ Change the model with `VF_LLM_MODEL`. For a hosted service it is worth comparing
 docker compose pull && docker compose up -d
 ```
 
-User settings (`/channel`, `/confirm`, `/style`, `/names`) live in the `vf-data` volume and survive updates. To pin a version, set `VF_IMAGE=ghcr.io/kirillkuzin/voiceforever-server:0.2` in `.env`.
+User settings (`/channel`, `/confirm`, `/style`, `/names`) live in the `vf-data` volume and survive updates. To pin a version, set `VF_IMAGE=ghcr.io/kirillkuzin/voiceforever-server:1.0` in `.env`.
 
 ## Building from source
 

@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not work as the docs say
+labels: [bug]
+body:
+  - type: dropdown
+    id: part
+    attributes:
+      label: Part
+      options:
+        - Windows app
+        - Addon
+        - Server
+        - Telegram bot
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server
+      options:
+        - Hosted (voiceforever.crazybrain.space)
+        - Self-hosted
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: App (title bar), addon (AddOns list in the game), server image tag if self-hosted.
+      placeholder: app 1.0.0, addon 1.0.0, server 1.0.0
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: "`%APPDATA%\\VoiceForever\\agent.log` or `docker compose logs`. Remove tokens and keys."
+      render: text
+  - type: input
+    id: setup
+    attributes:
+      label: Windows and controller
+      placeholder: Windows 11, Xbox controller over Bluetooth
