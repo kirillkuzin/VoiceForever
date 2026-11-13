@@ -1,0 +1,23 @@
+# CurseForge package, built by BigWigsMods/packager in .github/workflows/curseforge.yml.
+# The package holds only the addon folder and the license: a new folder at the top of the
+# repository must go into "ignore" (the workflow fails if anything else gets into the zip).
+package-as: VoiceForever
+
+move-folders:
+  VoiceForever/addon/VoiceForever: VoiceForever
+
+ignore:
+  - addon/tests
+  - addon/pytest.ini
+  - agent
+  - server
+  - docs
+  - README.md
+  - CONTRIBUTING.md
+  - SECURITY.md
+  - docker-compose.yml
+
+# The workflow writes the release notes into this file. Dot files never go into the package.
+manual-changelog:
+  filename: .curseforge-changelog.md
+  markup-type: markdown

@@ -1,0 +1,111 @@
+name: CurseForge
+
+# Publishing a release on GitHub uploads the addon to CurseForge (BigWigsMods/packager,
+# settings in .pkgmeta), with the release notes as the changelog. The upload is skipped when
+# the addon did not change since the previous release: CurseForge does not allow re-uploads
+# without changes.
+# Pull requests get a dry run: the package is built and checked, nothing is uploaded.
+#
+# Needs (Settings > Secrets and variables > Actions):
+#   variable CURSEFORGE_PROJECT_ID  the project ID from the CurseForge project page
+#   secret   CF_API_TOKEN           an API token from https://authors.curseforge.com
+on:
+  release:
+    types: [published]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: curseforge-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the packager reads the version from the tag
+      - uses: astral-sh/setup-uv@v7
+      - name: Run the addon tests
+        working-directory: addon
+        run: uv run --no-project --python 3.13 --with pytest --with lupa pytest -q tests
+
+      - name: Did the addon change since the previous release?
+        id: changed
+        if: github.event_name == 'release'
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'v*' "HEAD^" 2>/dev/null || true)
+          toc=addon/VoiceForever/VoiceForever.toc
+          if [ -z "$prev" ]; then
+            changed=true
+          elif ! git diff --quiet "$prev" HEAD -- addon/VoiceForever ":(exclude)$toc"; then
+            changed=true
+          # the .toc counts only for lines other than "## Version:"
+          elif git diff -U0 "$prev" HEAD -- "$toc" | grep -E '^[+-][^+-]' | grep -qvE '^[+-]## Version:'; then
+            changed=true
+          else
+            changed=false
+            echo "::notice::The addon is the same as in $prev: nothing to upload to CurseForge."
+          fi
+          echo "previous release: ${prev:-none}, addon changed: $changed"
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Check the CurseForge settings
+        if: steps.changed.outputs.changed == 'true'
+        env:
+          PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          if [ -z "$PROJECT_ID" ] || [ -z "$CF_API_TOKEN" ]; then
+            echo "::error::Set the variable CURSEFORGE_PROJECT_ID and the secret CF_API_TOKEN in Settings > Secrets and variables > Actions, then re-run this job."
+            exit 1
+          fi
+
+      - name: Changelog
+        env:
+          NOTES: ${{ github.event.release.body }}
+          URL: ${{ github.event.release.html_url }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != release ]; then
+            echo "Dry run from a pull request." > .curseforge-changelog.md
+          elif [ -n "$NOTES" ]; then
+            printf '%s\n' "$NOTES" > .curseforge-changelog.md
+          else
+            echo "Release notes: $URL" > .curseforge-changelog.md
+          fi
+
+      # Build and check first; the upload below packs the same files again.
+      - name: Package
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -d -n "{package-name}-{project-version}:{project-version}"
+          pandoc: false
+      - name: Check that the package holds only the addon
+        run: |
+          zip=$(ls .release/*.zip)
+          expected=$( { git -C addon ls-files VoiceForever; echo VoiceForever/LICENSE; } | sort )
+          actual=$(unzip -Z1 "$zip" | grep -v '/$' | sort)
+          echo "$actual"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::$zip does not match addon/VoiceForever + LICENSE. Add new top-level folders to 'ignore' in .pkgmeta."
+            diff <(echo "$expected") <(echo "$actual") || true
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VoiceForever-curseforge
+          path: .release/*.zip
+          include-hidden-files: true # .release starts with a dot
+          if-no-files-found: error
+
+      - name: Upload to CurseForge
+        if: steps.changed.outputs.changed == 'true'
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        with:
+          args: -p ${{ vars.CURSEFORGE_PROJECT_ID }} -n "{package-name}-{project-version}:{project-version}"
+          pandoc: false

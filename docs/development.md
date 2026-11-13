@@ -33,6 +33,9 @@ CI ([.github/workflows](../.github/workflows)) tests everything, publishes the s
 1. Set the new version in `agent/pyproject.toml`, `agent/vf_agent/__init__.py`, `server/pyproject.toml`, `server/vf_server/__init__.py`, `addon/VoiceForever/VoiceForever.toc`, and run `uv lock` in `agent/` and `server/`.
 2. Render the screenshots again (they show the version) and merge to `master`.
 3. Publish a release on GitHub with the tag `v<version>` on `master`. CI attaches the exe, the addon zip and `SHA256SUMS.txt` under the same names every time, so `releases/latest/download/<name>` always serves the newest, and tags the server image `<version>` and `<major>.<minor>`.
+4. The same release uploads the addon to CurseForge ([curseforge.yml](../.github/workflows/curseforge.yml), packed by [BigWigsMods/packager](https://github.com/BigWigsMods/packager) from [.pkgmeta](../.pkgmeta)) with the release notes as the changelog. It skips the upload when nothing in the addon changed except the version: CurseForge does not allow re-uploads without changes. It needs the repository variable `CURSEFORGE_PROJECT_ID` and the secret `CF_API_TOKEN`.
+
+A new top-level folder in the repository goes into `ignore` in `.pkgmeta`, otherwise the CurseForge check in pull requests fails.
 
 ## Screenshots
 

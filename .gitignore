@@ -13,3 +13,7 @@ config.toml
 
 # SDL3 for the agent: CI downloads it, see .github/workflows/agent-exe.yml
 agent/SDL3.dll
+
+# CurseForge package (BigWigsMods/packager, see .pkgmeta)
+.release/
+.curseforge-changelog.md
