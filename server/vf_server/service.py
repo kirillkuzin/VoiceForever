@@ -119,17 +119,22 @@ class VoiceService:
             size += len(name) + 2
         return names
 
-    def speech_language(self, user_id: int) -> str:
+    def speech_language(self, user_id: int, language: str = "") -> str:
         """The language of the hints sent with the audio: the one speech recognition is
-        locked to if it is one of the bot's, else the player's (see Store.ui().language())."""
-        locked = getattr(self.transcriber, "language", "")
+        locked to (the player's account setting, else the server's) if it is one of the bot's,
+        else the player's bot language (see Store.ui().language())."""
+        locked = language or getattr(self.transcriber, "language", "")
         return locked if locked in LANGUAGES else self.store.ui(user_id).language()
 
-    async def transcribe(self, user_id: int, audio: bytes, filename: str) -> str:
-        lang = self.speech_language(user_id)
+    async def transcribe(self, user_id: int, audio: bytes, filename: str, language: str = "") -> str:
+        """`language` is the one the player set on their account (Check.speech_language);
+        "" leaves recognition to the server's VF_STT_LANGUAGE."""
+        lang = self.speech_language(user_id, language)
         names = self.stt_names(user_id)
         hint = t(lang, "stt.names", names=", ".join(names)) if names else ""
-        return await self.transcriber.transcribe(audio, filename, extra_prompt=hint, lang=lang)
+        return await self.transcriber.transcribe(
+            audio, filename, extra_prompt=hint, lang=lang, language=language
+        )
 
     async def admit(
         self, user_id: int, source: Source, *, voice: bool, audio_s: float = 0.0
@@ -231,7 +236,7 @@ class VoiceService:
             self.report(check, user_id, Source.AGENT, outcome, duration_s, result)
 
         try:
-            transcript = await self.transcribe(user_id, upload.audio, "voice.wav")
+            transcript = await self.transcribe(user_id, upload.audio, "voice.wav", check.speech_language)
         except TranscriptionError as e:
             log.error("STT failed for agent voice: %s", e)
             report(Outcome.STT_ERROR)

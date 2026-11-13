@@ -37,10 +37,11 @@ def frame(voice_id: str, audio: bytes, fmt: str = "wav") -> bytes:
 
 class FakeTranscriber:
     def __init__(self, text="", error=False):
-        self.text, self.error, self.files = text, error, []
+        self.text, self.error, self.files, self.languages = text, error, [], []
 
-    async def transcribe(self, audio, filename, extra_prompt="", lang="en"):
+    async def transcribe(self, audio, filename, extra_prompt="", lang="en", language=""):
         self.files.append((filename, len(audio)))
+        self.languages.append((language, lang))
         if self.error:
             raise TranscriptionError("STT HTTP 500")
         return self.text

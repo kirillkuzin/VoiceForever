@@ -3,9 +3,10 @@
 Works with OpenAI (gpt-4o-mini-transcribe, gpt-4o-transcribe, whisper-1), Groq
 (whisper-large-v3-turbo) and self-hosted servers such as speaches / faster-whisper-server.
 
-The model detects the spoken language itself unless VF_STT_LANGUAGE locks it. The prompt
-lists game words players say (the stt.prompt string of the bot's locales, in the player's
-language, or VF_STT_PROMPT when the server sets one) and the nicknames they use.
+The model detects the spoken language itself unless something locks it: the language the
+player set on their account (with an access service, see access.py), else VF_STT_LANGUAGE.
+The prompt lists game words players say (the stt.prompt string of the bot's locales, in the
+player's language, or VF_STT_PROMPT when the server sets one) and the nicknames they use.
 """
 
 import logging
@@ -51,16 +52,22 @@ class Transcriber:
         self.timeout = aiohttp.ClientTimeout(total=timeout_s)
 
     async def transcribe(
-        self, audio: bytes, filename: str = "voice.ogg", extra_prompt: str = "", lang: str = SOURCE
+        self,
+        audio: bytes,
+        filename: str = "voice.ogg",
+        extra_prompt: str = "",
+        lang: str = SOURCE,
+        language: str = "",
     ) -> str:
-        """`lang` is the language the game words of the prompt are given in."""
+        """`lang` is the language the game words of the prompt are given in. `language` locks
+        recognition for this recording (the player's own setting); "" keeps the server's."""
         form = aiohttp.FormData()
         mime = MIME_TYPES.get(PurePath(filename).suffix.lower(), "application/octet-stream")
         form.add_field("file", audio, filename=filename, content_type=mime)
         form.add_field("model", self.model)
         form.add_field("response_format", "json")
-        if self.language:
-            form.add_field("language", self.language)
+        if language := (language.strip().lower() or self.language):
+            form.add_field("language", language)
         if prompt := f"{self.prompt or t(lang, 'stt.prompt')} {extra_prompt}".strip():
             form.add_field("prompt", prompt)
 

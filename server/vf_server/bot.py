@@ -424,7 +424,7 @@ def build_router(
         buf = io.BytesIO()
         await bot.download(media, destination=buf)
         try:
-            transcript = await service.transcribe(uid, buf.getvalue(), filename)
+            transcript = await service.transcribe(uid, buf.getvalue(), filename, check.speech_language)
         except TranscriptionError as e:
             log.error("STT failed: %s", e)
             service.report(check, uid, Source.TELEGRAM, Outcome.STT_ERROR, audio_s)
