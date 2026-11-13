@@ -43,6 +43,15 @@ async def test_the_model_detects_the_language_unless_the_server_locks_it():
     assert seen["prompt"] == "Ragnaros, Onyxia"
 
 
+async def test_the_players_language_wins_over_the_servers():
+    seen = await transcribe_on_fake_server({"language": "ru"}, language="de", lang="de")
+    assert seen["language"] == "de" and seen["prompt"] == t("de", "stt.prompt")
+    seen = await transcribe_on_fake_server({}, language=" FR ")
+    assert seen["language"] == "fr"
+    seen = await transcribe_on_fake_server({"language": "ru"}, language="")  # not set: the server's
+    assert seen["language"] == "ru"
+
+
 def test_language_setting_defaults_to_detection():
     base = {"VF_TELEGRAM_TOKEN": "x", "VF_USERS": "42:agent-token-0123456789"}
     assert Settings.from_env(base).stt_language == ""
@@ -54,8 +63,8 @@ class RecordingTranscriber:
         self.language = language
         self.calls = []
 
-    async def transcribe(self, audio, filename, extra_prompt="", lang="en"):
-        self.calls.append((lang, extra_prompt))
+    async def transcribe(self, audio, filename, extra_prompt="", lang="en", language=""):
+        self.calls.append((lang, extra_prompt) + ((language,) if language else ()))
         return "hallo"
 
 
@@ -80,3 +89,10 @@ async def test_hints_come_in_the_player_language():
     assert service.speech_language(USER) == "ru"
     stt.language = "ja"  # not a bot language: the player's stays
     assert service.speech_language(USER) == "fr"
+
+    # The language set on the player's account wins over the server's, and the hints follow it
+    stt.language = "ru"
+    await service.transcribe(USER, b"ogg", "voice.ogg", language="de")
+    assert stt.calls[-1] == ("de", "Namen: Arthorn, Liana.", "de")
+    assert service.speech_language(USER, "es") == "es"
+    assert service.speech_language(USER, "uk") == "fr"  # not a bot language: the player's

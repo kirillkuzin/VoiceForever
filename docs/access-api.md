@@ -55,7 +55,7 @@ Asked before speech recognition, for every voice or text message.
 ```
 
 ```json
-{"allow": "claude", "check_id": "c-81f2", "account": {...}}
+{"allow": "claude", "check_id": "c-81f2", "speech_language": "de", "account": {...}}
 {"allow": "transcribe", "check_id": "c-81f3", "reason": "limit", "account": {...}}
 {"allow": "no", "reason": "no_access", "link": "https://example.com/account"}
 ```
@@ -65,6 +65,8 @@ Asked before speech recognition, for every voice or text message.
 | `claude` | speech recognition, then Claude picks the channel and fixes the text |
 | `transcribe` | speech recognition, then the keyword rules pick the channel; with `reason: "limit"` the player is told that today's AI messages are used up |
 | `no` | nothing; the player sees the reason and a button to `link` |
+
+`speech_language` is optional: the language the player speaks, if they set one on their account, as an ISO 639-1 code (`en`, `ru`, `de`...). Speech recognition is locked to it for this message, and the word hints sent with the audio come in it when it is one of the bot's languages (en, ru, de, es, fr). Without it, or with an empty or malformed value, the server's own `VF_STT_LANGUAGE` applies, as it does without an access service.
 
 Reasons the server has texts for: `unknown`, `revoked`, `no_access`, `limit`, `rate`, `unavailable`. Any other reason reads as `no_access`. `revoked` also closes the agent's connection (code 4001).
 

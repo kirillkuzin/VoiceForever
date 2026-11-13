@@ -1,9 +1,9 @@
 """Who may use the server and what each message may do.
 
 The server asks an access point three things: who a token or a Telegram user is (`resolve`),
-whether a message may be processed and with what (`check`), and what a processed message
-cost (`usage`). A fourth call, `payment`, lets the Telegram bot sell a subscription for
-Telegram Stars without keeping any billing here.
+whether a message may be processed and with what (`check`, which may also name the language
+the player speaks), and what a processed message cost (`usage`). A fourth call, `payment`,
+lets the Telegram bot sell a subscription for Telegram Stars without keeping any billing here.
 
 Two access points share one interface:
 * LocalAccess - the people listed in VF_USERS, without limits (self-hosted, as before).
@@ -16,6 +16,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -80,6 +81,9 @@ class Check:
     reason: str = ""
     link: str = ""
     account: Mapping[str, Any] | None = None
+    # The language the player speaks, set on their account (an ISO 639-1 code such as "de").
+    # Speech recognition is locked to it; "" leaves it to the server's VF_STT_LANGUAGE.
+    speech_language: str = ""
 
     @property
     def ok(self) -> bool:
@@ -364,6 +368,7 @@ class RemoteAccess:
             reason=str(answer.get("reason", "") or ("" if allow is not Allow.NO else Reason.NO_ACCESS)),
             link=str(answer.get("link", "")),
             account=_mapping(answer.get("account")),
+            speech_language=language_code(answer.get("speech_language")),
         )
 
     async def usage(self, report: Usage) -> Mapping[str, Any] | None:
@@ -425,3 +430,12 @@ class RemoteAccess:
 
 def _mapping(value: object) -> Mapping[str, Any] | None:
     return value if isinstance(value, dict) else None
+
+
+_LANGUAGE_CODE = re.compile(r"[a-z]{2,3}")
+
+
+def language_code(value: object) -> str:
+    """A language code for speech recognition ("de", "RU " -> "ru"); "" for anything else."""
+    code = value.strip().lower() if isinstance(value, str) else ""
+    return code if _LANGUAGE_CODE.fullmatch(code) else ""

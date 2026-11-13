@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import aiohttp
 import pytest
 from aiogram import Bot, Dispatcher
+from aiogram.types import File
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
@@ -52,8 +53,8 @@ class FakeAccess:
 
     payments = True
 
-    def __init__(self, allow=Allow.CLAUDE, reason=""):
-        self.allow, self.reason = allow, reason
+    def __init__(self, allow=Allow.CLAUDE, reason="", speech_language=""):
+        self.allow, self.reason, self.speech_language = allow, reason, speech_language
         self.checks, self.usages, self.paid_calls = [], [], []
 
     async def resolve_agent(self, token):
@@ -72,7 +73,8 @@ class FakeAccess:
     async def check(self, user_id, source, *, voice, audio_s=0.0):
         self.checks.append((user_id, str(source), voice, audio_s))
         link = LINK if self.allow is Allow.NO else ""
-        return Check(self.allow, check_id=f"c{len(self.checks)}", reason=self.reason, link=link)
+        return Check(self.allow, check_id=f"c{len(self.checks)}", reason=self.reason, link=link,
+                     speech_language=self.speech_language)
 
     async def usage(self, report):
         self.usages.append(report)
@@ -223,6 +225,12 @@ async def test_remote_check_and_usage(remote):
         "cache_read_tokens": 800, "cache_write_tokens": 0,
     })
 
+    server.answers["check"] = {"allow": "claude", "check_id": "c10", "speech_language": "DE"}
+    assert (await access.check(USER, Source.AGENT, voice=True)).speech_language == "de"
+    for unusable in (None, "", 7, "deutsch", "d e"):
+        server.answers["check"] = {"allow": "claude", "check_id": "c11", "speech_language": unusable}
+        assert (await access.check(USER, Source.AGENT, voice=True)).speech_language == ""
+
     server.answers["check"] = {"allow": "no"}
     assert await access.check(USER, Source.AGENT, voice=False) == Check(Allow.NO, reason=Reason.NO_ACCESS)
     server.answers["check"] = {"allow": "everything"}
@@ -328,6 +336,19 @@ async def test_agent_gets_its_account_and_claude_usage_is_reported():
     assert usage.tokens == TokenUsage("claude-haiku-5-5", 900, 40, 800)
 
 
+@pytest.mark.parametrize("account_language, server_language, sent", [
+    ("de", "ru", "de"),  # set on the account: wins
+    ("", "ru", ""),  # not set: the transcriber keeps the server's VF_STT_LANGUAGE
+])
+async def test_recording_is_recognised_in_the_accounts_language(account_language, server_language, sent):
+    stt = FakeTranscriber("всем привет")
+    stt.language = server_language
+    hub, service, _ = make_service(FakeAccess(speech_language=account_language), stt)
+    got, _ = await connect(hub, service, uploads=[frame("v1", wav(1))], until=results)
+    assert results(got)[0]["status"] == "ok"
+    assert stt.languages == [(sent, account_language or server_language)]
+
+
 async def test_denied_recording_is_not_transcribed():
     access = FakeAccess(Allow.NO, Reason.LIMIT)
     hub, service, stt = make_service(access)
@@ -377,7 +398,12 @@ class PaymentSession(RecordingSession):
                 return "https://t.me/$invoice-1"
             case "sendWidget":
                 return SimpleNamespace(message_id=500)
+            case "getFile":
+                return File(file_id="voice-1", file_unique_id="u1", file_path="voice/1.oga")
         return True
+
+    async def stream_content(self, *args, **kwargs):
+        yield b"OggS voice"
 
 
 @pytest.fixture
@@ -434,6 +460,16 @@ async def test_telegram_message_is_checked_typed_and_reported(paid_bot):
     [usage] = access.usages
     assert (usage.user_id, usage.source, usage.outcome) == (USER, Source.TELEGRAM, Outcome.DELIVERED)
     assert hub.accounts[-1] == (USER, {"plan": "full", "ai_left": 98})
+
+
+async def test_telegram_voice_is_recognised_in_the_accounts_language(paid_bot):
+    access, hub, service, message, _, _ = paid_bot
+    service.store.update_ui(USER, widgets=False)
+    access.speech_language = "de"
+    await message(voice={"file_id": "voice-1", "file_unique_id": "u1", "duration": 2})
+    assert access.checks == [(USER, "telegram", True, 2.0)]
+    assert service.transcriber.languages == [("de", "de")]
+    assert hub.sent == [ChatMessage(Channel.SAY, "", "Всем привет")]
 
 
 async def test_telegram_refusals(paid_bot):
