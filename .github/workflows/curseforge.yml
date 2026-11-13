@@ -98,6 +98,7 @@ jobs:
         with:
           name: VoiceForever-curseforge
           path: .release/*.zip
+          include-hidden-files: true # .release starts with a dot
           if-no-files-found: error
 
       - name: Upload to CurseForge
