@@ -22,6 +22,7 @@ from ..config import AgentConfig, load_draft, peek_language
 from ..controller import Controller
 from . import winapi
 from .api import Api, event_json
+from .icons import ICO
 from .tray import MenuItem, Tray
 
 log = logging.getLogger("vf_agent")
@@ -95,7 +96,8 @@ class App:
         self.window.events.minimized += lambda: self._set_visible(False)
         self.window.events.restored += lambda: self._set_visible(True)
         try:
-            webview.start(self._started, gui="edgechromium")
+            # The icon of the window and its taskbar button; the exe has the same one.
+            webview.start(self._started, gui="edgechromium", icon=str(ICO))
         finally:
             self._shutdown()
         return 0

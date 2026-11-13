@@ -21,6 +21,7 @@ packages = ["vf_agent", "vf_agent.gui"]
 
 [tool.setuptools.package-data]
 vf_agent = ["ui/*.*", "ui/fonts/*", "ui/locales/*"]
+"vf_agent.gui" = ["VoiceForever.ico"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

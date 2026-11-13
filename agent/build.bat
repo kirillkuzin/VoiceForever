@@ -10,8 +10,7 @@ if not exist SDL3.dll (
   powershell -NoProfile -Command "$ErrorActionPreference='Stop'; $zip=Join-Path $env:TEMP 'SDL3.zip'; Invoke-WebRequest ('https://github.com/libsdl-org/SDL/releases/download/release-%SDL_VERSION%/SDL3-%SDL_VERSION%-win32-x64.zip') -OutFile $zip; if ((Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() -ne '%SDL_SHA256%') { throw 'SDL3 zip hash mismatch' }; $dir=Join-Path $env:TEMP 'vf-sdl3'; Expand-Archive $zip -DestinationPath $dir -Force; Copy-Item (Join-Path $dir 'SDL3.dll') SDL3.dll" || goto :failed
 )
 uv sync --locked || goto :failed
-uv run python -m vf_agent.gui.icons build\VoiceForever.ico || goto :failed
-uv run pyinstaller --noconfirm --onefile --windowed --name VoiceForeverAgent --icon build\VoiceForever.ico --add-data "vf_agent\ui;vf_agent\ui" --add-binary "SDL3.dll;." run_agent.py || goto :failed
+uv run pyinstaller --noconfirm --onefile --windowed --name VoiceForeverAgent --icon vf_agent\gui\VoiceForever.ico --add-data "vf_agent\gui\VoiceForever.ico;vf_agent\gui" --add-data "vf_agent\ui;vf_agent\ui" --add-binary "SDL3.dll;." run_agent.py || goto :failed
 echo.
 echo Done: dist\VoiceForeverAgent.exe. Start it: the window walks you through the settings.
 pause

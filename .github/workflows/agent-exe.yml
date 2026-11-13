@@ -62,9 +62,9 @@ jobs:
         run: uv run --locked pytest -q
       - name: Build exe
         run: |
-          uv run --locked python -m vf_agent.gui.icons build\VoiceForever.ico
           uv run --locked pyinstaller --noconfirm --onefile --windowed --name VoiceForeverAgent `
-            --icon build\VoiceForever.ico --add-data "vf_agent\ui;vf_agent\ui" --add-binary "SDL3.dll;." run_agent.py
+            --icon vf_agent\gui\VoiceForever.ico --add-data "vf_agent\gui\VoiceForever.ico;vf_agent\gui" `
+            --add-data "vf_agent\ui;vf_agent\ui" --add-binary "SDL3.dll;." run_agent.py
       - name: Smoke test the exe
         run: |
           # The exe is a window app: Start-Process waits for it, and the checks read agent.log,
