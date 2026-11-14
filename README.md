@@ -6,6 +6,7 @@
 [![Server image](https://github.com/kirillkuzin/VoiceForever/actions/workflows/server-image.yml/badge.svg?branch=master)](https://github.com/kirillkuzin/VoiceForever/actions/workflows/server-image.yml)
 [![Agent exe](https://github.com/kirillkuzin/VoiceForever/actions/workflows/agent-exe.yml/badge.svg?branch=master)](https://github.com/kirillkuzin/VoiceForever/actions/workflows/agent-exe.yml)
 [![License: AGPL-3.0](https://img.shields.io/github/license/kirillkuzin/VoiceForever)](LICENSE)
+[![CurseForge](https://img.shields.io/badge/CurseForge-VoiceForever-F16436?logo=curseforge&logoColor=white)](https://www.curseforge.com/wow/addons/voiceforever)
 
 **Speak, and your message appears in the right World of Warcraft: Forever chat channel.**
 
@@ -54,7 +55,7 @@ The app, the bot and the addon speak English, Russian, German, Spanish and Frenc
 
 ## Get started
 
-Downloads and everything you need to start are on **[the VoiceForever website][website]**.
+Downloads and everything you need to start are on **[the VoiceForever website][website]**. The addon is also on [CurseForge](https://www.curseforge.com/wow/addons/voiceforever), so the CurseForge app installs and updates it.
 
 ### Host it yourself
 
