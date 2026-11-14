@@ -6,7 +6,7 @@ The addon has no network access: everything reaches it as keyboard input. Its me
 
 ## Install
 
-Download [`VoiceForever-addon.zip`](https://github.com/kirillkuzin/VoiceForever/releases/latest/download/VoiceForever-addon.zip) from the latest release, or take the `addon/VoiceForever` folder from this repository, and put the `VoiceForever` folder into `Interface\AddOns` in your WoW Forever folder.
+Install it from [CurseForge](https://www.curseforge.com/wow/addons/voiceforever): the CurseForge app keeps it up to date. Or download [`VoiceForever-addon.zip`](https://github.com/kirillkuzin/VoiceForever/releases/latest/download/VoiceForever-addon.zip) from the latest release, or take the `addon/VoiceForever` folder from this repository, and put the `VoiceForever` folder into `Interface\AddOns` in your WoW Forever folder.
 
 The addon is built for interface 16001. If the game calls it out of date after a patch, turn on "Load out of date AddOns", or put the number from `/dump select(4, GetBuildInfo())` into `VoiceForever.toc`.
 

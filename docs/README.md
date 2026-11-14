@@ -31,7 +31,7 @@ gamepad button + PC microphone ──────┴→ server: speech recogniti
 ## Quick start
 
 1. **Server.** Download `docker-compose.yml` and `.env.example` (as `.env`) to your VPS. In `.env`, fill in the bot token from [@BotFather](https://t.me/BotFather), `VF_USERS` (`<Telegram ID>:<agent token>`), your Claude key and the speech recognition settings. Run `docker compose pull && docker compose up -d`, then put TLS (for example Caddy) in front and use `wss://<domain>/ws`. Details: [server.md](server.md).
-2. **Addon.** Copy `VoiceForever` into `Interface\AddOns` of WoW Forever. Details: [addon.md](addon.md).
+2. **Addon.** Install it from [CurseForge](https://www.curseforge.com/wow/addons/voiceforever), or copy `VoiceForever` into `Interface\AddOns` of WoW Forever. Details: [addon.md](addon.md).
 3. **Windows app.** Run `VoiceForeverAgent.exe`; the first-run setup asks for the server address and the agent token, then the microphone and the gamepad button, and checks the button in the game. Details: [agent.md](agent.md).
 
 ## Safety and the game's rules
